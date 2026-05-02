@@ -1,0 +1,44 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="url(#shieldGradient)" filter="url(#shadow)"/>
+  
+  <!-- Main shield shape -->
+  <path d="M64 16 L96 32 L96 64 Q96 88 64 104 Q32 88 32 64 L32 32 Z" 
+        fill="#ffffff" opacity="0.95"/>
+  
+  <!-- Inner shield design -->
+  <path d="M64 24 L88 36 L88 64 Q88 82 64 94 Q40 82 40 64 L40 36 Z" 
+        fill="url(#shieldGradient)"/>
+  
+  <!-- Security lock icon in center -->
+  <rect x="56" y="52" width="16" height="12" rx="2" fill="#ffffff"/>
+  <path d="M58 52 L58 48 Q58 44 62 44 L66 44 Q70 44 70 48 L70 52" 
+        stroke="#ffffff" stroke-width="2" fill="none"/>
+  
+  <!-- Analysis dots/indicators -->
+  <circle cx="48" cy="44" r="2" fill="url(#accentGradient)"/>
+  <circle cx="80" cy="44" r="2" fill="url(#accentGradient)"/>
+  <circle cx="48" cy="84" r="2" fill="url(#accentGradient)"/>
+  <circle cx="80" cy="84" r="2" fill="url(#accentGradient)"/>
+  
+  <!-- Data flow lines -->
+  <path d="M48 46 L56 52" stroke="url(#accentGradient)" stroke-width="1.5" opacity="0.7"/>
+  <path d="M80 46 L72 52" stroke="url(#accentGradient)" stroke-width="1.5" opacity="0.7"/>
+  <path d="M48 82 L56 76" stroke="url(#accentGradient)" stroke-width="1.5" opacity="0.7"/>
+  <path d="M80 82 L72 76" stroke="url(#accentGradient)" stroke-width="1.5" opacity="0.7"/>
+</svg>

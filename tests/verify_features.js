@@ -1,0 +1,576 @@
+/**
+ * SOC Analyst Toolkit - Feature Verification Tests
+ * 
+ * This test file verifies that all IOC parsing functions work correctly.
+ * Run with: node tests/verify_features.js
+ */
+
+const assert = require('assert');
+
+// Mock the SOCToolkit class with production-like logic
+class SOCToolkitMock {
+  constructor() {
+    // Full TLD list matching production
+    this.tlds = new Set([
+      'com', 'net', 'org', 'edu', 'gov', 'mil', 'io', 'co', 'uk', 'de', 'jp', 'fr', 'au', 'ru', 'ch', 'it', 'nl', 'ca', 'cn', 'br', 'us', 'info', 'biz',
+      'app', 'dev', 'cloud', 'ai', 'tech', 'online', 'store', 'blog', 'site', 'xyz',
+      'eu', 'in', 'mx', 'es', 'pl', 'be', 'se', 'dk', 'no', 'fi', 'at', 'pt', 'ie',
+      'hk', 'sg', 'kr', 'tw', 'id', 'vn', 'th', 'my', 'ph', 'nz', 'za'
+    ]);
+    // Domain exclusion patterns matching production
+    this._domainExcludePatterns = [
+      /^[a-z]\.[a-z]$/i,
+      /\.(local|localhost|internal|corp|lan)$/i,
+      /^\d+\.\d+$/,
+      /^\d+\.\d+\.\d+$/,
+      /\.(jpg|png|gif|svg|pdf|doc|docx|xls|xlsx|zip|rar|tar|gz)$/i,
+    ];
+    this._labelPattern = /^[a-z0-9-]+$/i;
+  }
+
+  extractIOCs(text) {
+    const results = [];
+    if (!text) return results;
+
+    const urlRe = /\bhttps?:\/\/[\w.-]+(?::\d+)?(?:\/[\w\-._~:\/?#[\]@!\$&'()*+,;=%]*)?/gi;
+    const ipv4Re = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+    const ipv6Re = /\b(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+|::(?:ffff(?::0{1,4})?:)?(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9]))\b/gi;
+    const cveRe = /\bCVE-\d{4}-\d{4,}\b/gi;
+    const mitreRe = /\bT\d{4}(?:\.\d{3})?\b/gi;
+    const btcRe = /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g;
+    const ethRe = /\b0x[a-fA-F0-9]{40}\b/g;
+    const macRe = /\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g;
+    const emailRe = /\b[\w.+-]+@([\w-]+\.)+[\w-]{2,}\b/gi;
+    const domainRe = /\b(?!https?:\/\/)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi;
+    const md5Re = /\b[a-f0-9]{32}\b/gi;
+    const sha1Re = /\b[a-f0-9]{40}\b/gi;
+    const sha256Re = /\b[a-f0-9]{64}\b/gi;
+    const sha512Re = /\b[a-f0-9]{128}\b/gi;
+
+    const add = (type, value, category) => {
+      if (!value) return;
+      if (category === 'domain') {
+        if (this.isValidDomain(value)) {
+          results.push({ type, value, category });
+        }
+      } else if (category === 'ip') {
+        if (this.isValidIP(value)) {
+          results.push({ type, value, category });
+        }
+      } else {
+        results.push({ type, value, category });
+      }
+    };
+
+    (text.match(urlRe) || []).forEach(v => add('URL', v, 'url'));
+    (text.match(ipv4Re) || []).forEach(v => add('IPv4', v, 'ip'));
+    (text.match(ipv6Re) || []).forEach(v => add('IPv6', v.toLowerCase(), 'ip'));
+    (text.match(cveRe) || []).forEach(v => add('CVE', v.toUpperCase(), 'cve'));
+    (text.match(mitreRe) || []).forEach(v => add('MITRE', v.toUpperCase(), 'mitre'));
+    (text.match(btcRe) || []).forEach(v => add('Bitcoin', v, 'crypto'));
+    (text.match(ethRe) || []).forEach(v => add('Ethereum', v.toLowerCase(), 'crypto'));
+    (text.match(macRe) || []).forEach(v => add('MAC', v.toUpperCase(), 'mac'));
+    (text.match(emailRe) || []).forEach(v => add('Email', v, 'email'));
+
+    // Extract hashes - check longest first to avoid partial matches
+    const hashMatches = new Set();
+    
+    // SHA512 (128 chars)
+    (text.match(sha512Re) || []).forEach(v => {
+      const l = v.toLowerCase();
+      if (!hashMatches.has(l)) {
+        add('SHA512', l, 'hash');
+        hashMatches.add(l);
+      }
+    });
+    
+    // SHA256 (64 chars)
+    (text.match(sha256Re) || []).forEach(v => {
+      const l = v.toLowerCase();
+      if (!hashMatches.has(l)) {
+        add('SHA256', l, 'hash');
+        hashMatches.add(l);
+      }
+    });
+    
+    // SHA1 (40 chars)
+    (text.match(sha1Re) || []).forEach(v => {
+      const l = v.toLowerCase();
+      if (!hashMatches.has(l)) {
+        add('SHA1', l, 'hash');
+        hashMatches.add(l);
+      }
+    });
+    
+    // MD5 (32 chars)
+    (text.match(md5Re) || []).forEach(v => {
+      const l = v.toLowerCase();
+      if (!hashMatches.has(l)) {
+        add('MD5', l, 'hash');
+        hashMatches.add(l);
+      }
+    });
+
+    // Domains: avoid duplicating ones already part of URLs/emails
+    const existing = new Set(results.map(r => r.value.toLowerCase()));
+    (text.match(domainRe) || []).forEach(v => {
+      const l = v.toLowerCase();
+      if (!existing.has(l)) {
+        add('Domain', l, 'domain');
+      }
+    });
+
+    return results;
+  }
+
+  // Production-matching domain validation
+  isValidDomain(domain) {
+    if (!domain || domain.length > 253) return false;
+
+    // Check exclusion patterns
+    for (const pattern of this._domainExcludePatterns) {
+      if (pattern.test(domain)) return false;
+    }
+
+    const labels = domain.toLowerCase().split('.');
+    if (labels.length < 2) return false;
+    
+    const tld = labels[labels.length - 1];
+    if (!this.tlds.has(tld)) return false;
+
+    // Validate each label
+    for (const label of labels) {
+      if (!this._labelPattern.test(label)) return false;
+      if (label.startsWith('-') || label.endsWith('-')) return false;
+      if (label.length > 63) return false;
+    }
+
+    return true;
+  }
+
+  isValidIP(ip) {
+    if (!ip) return false;
+    const parts = ip.split('.');
+    if (parts.length !== 4) return false;
+    for (const part of parts) {
+      const num = parseInt(part, 10);
+      if (isNaN(num) || num < 0 || num > 255) return false;
+      if (part.length > 1 && part.startsWith('0')) return false;
+    }
+    if (ip === '0.0.0.0' || ip === '255.255.255.255') return false;
+    return true;
+  }
+
+  // Defang/Fang helpers
+  fangText(text) {
+    if (!text) return text;
+    let t = text;
+    t = t.replace(/hxxps?:\/\//gi, s => s.replace('xx', 'tt'));
+    t = t.replace(/\[(?:dot|\.)\]|\(dot\)|\{dot\}/gi, '.');
+    t = t.replace(/\[(?:at)\]|\(at\)|\{at\}/gi, '@');
+    t = t.replace(/\[\.\]/g, '.');
+    return t;
+  }
+}
+
+// Test runner
+const toolkit = new SOCToolkitMock();
+let passed = 0;
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    console.log('[PASS]', name);
+    passed++;
+  } catch (e) {
+    console.error('[FAIL]', name);
+    console.error('  ', e.message);
+    failed++;
+  }
+}
+
+console.log('=== SOC Analyst Toolkit - IOC Parsing Tests ===\n');
+
+// ==================== IPv4 Tests ====================
+console.log('--- IPv4 Address Tests ---');
+
+test('Detect standard IPv4', () => {
+  const text = 'Connection from 192.168.1.1 detected';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv4' && i.value === '192.168.1.1');
+  assert.ok(ip, 'IPv4 not detected');
+});
+
+test('Detect IPv4 at start of string', () => {
+  const text = '10.0.0.1 is the gateway';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv4' && i.value === '10.0.0.1');
+  assert.ok(ip, 'IPv4 at start not detected');
+});
+
+test('Detect multiple IPv4 addresses', () => {
+  const text = 'Servers at 192.168.1.1 and 10.0.0.1';
+  const iocs = toolkit.extractIOCs(text);
+  assert.strictEqual(iocs.filter(i => i.type === 'IPv4').length, 2, 'Should detect 2 IPv4 addresses');
+});
+
+test('Reject IPv4 with out-of-range octet', () => {
+  const text = 'IP 256.1.1.1 is invalid';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv4');
+  assert.ok(!ip, 'Invalid IPv4 should not be detected');
+});
+
+test('Reject IPv4 with leading zeros', () => {
+  const text = 'IP 192.168.01.1 has leading zeros';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv4');
+  assert.ok(!ip, 'IPv4 with leading zeros should not be detected');
+});
+
+test('Reject 0.0.0.0', () => {
+  const text = 'Address 0.0.0.0';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv4' && i.value === '0.0.0.0');
+  assert.ok(!ip, '0.0.0.0 should be rejected');
+});
+
+test('Reject 255.255.255.255', () => {
+  const text = 'Broadcast 255.255.255.255';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv4' && i.value === '255.255.255.255');
+  assert.ok(!ip, '255.255.255.255 should be rejected');
+});
+
+// ==================== IPv6 Tests ====================
+console.log('\n--- IPv6 Address Tests ---');
+
+test('Detect full IPv6', () => {
+  const text = 'IPv6: 2001:0db8:85a3:0000:0000:8a2e:0370:7334';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv6');
+  assert.ok(ip, 'Full IPv6 not detected');
+});
+
+test('Detect compressed IPv6', () => {
+  const text = 'IPv6: 2001:db8::1';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv6');
+  assert.ok(ip, 'Compressed IPv6 not detected');
+});
+
+test('Detect IPv6 with IPv4 mapping', () => {
+  const text = 'IPv6: ::ffff:192.168.1.1';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv6');
+  assert.ok(ip, 'IPv4-mapped IPv6 not detected');
+});
+
+test('IPv6 is normalized to lowercase', () => {
+  const text = 'IPv6: 2001:DB8::1';
+  const iocs = toolkit.extractIOCs(text);
+  const ip = iocs.find(i => i.type === 'IPv6');
+  assert.ok(ip, 'IPv6 not detected');
+  assert.ok(ip.value === ip.value.toLowerCase(), 'IPv6 should be lowercase');
+});
+
+// ==================== Domain Tests ====================
+console.log('\n--- Domain Tests ---');
+
+test('Detect valid .com domain', () => {
+  const text = 'Visit example.com for more';
+  const iocs = toolkit.extractIOCs(text);
+  const domain = iocs.find(i => i.type === 'Domain' && i.value === 'example.com');
+  assert.ok(domain, 'Domain not detected');
+});
+
+test('Detect subdomain', () => {
+  const text = 'API at api.example.com';
+  const iocs = toolkit.extractIOCs(text);
+  const domain = iocs.find(i => i.type === 'Domain' && i.value === 'api.example.com');
+  assert.ok(domain, 'Subdomain not detected');
+});
+
+test('Reject invalid TLD', () => {
+  const text = 'Visit example.invalidtld';
+  const iocs = toolkit.extractIOCs(text);
+  const domain = iocs.find(i => i.type === 'Domain');
+  assert.ok(!domain, 'Invalid TLD should not be detected');
+});
+
+test('Reject file extension as domain', () => {
+  const text = 'File: document.pdf';
+  const iocs = toolkit.extractIOCs(text);
+  const domain = iocs.find(i => i.type === 'Domain');
+  assert.ok(!domain, 'File extension should not be detected as domain');
+});
+
+test('Reject version number as domain', () => {
+  const text = 'Version 1.2.3';
+  const iocs = toolkit.extractIOCs(text);
+  const domain = iocs.find(i => i.type === 'Domain');
+  assert.ok(!domain, 'Version number should not be detected as domain');
+});
+
+test('Reject internal domains', () => {
+  const text = 'Server at host.local';
+  const iocs = toolkit.extractIOCs(text);
+  const domain = iocs.find(i => i.type === 'Domain');
+  assert.ok(!domain, 'Internal .local domain should be rejected');
+});
+
+// ==================== URL Tests ====================
+console.log('\n--- URL Tests ---');
+
+test('Detect HTTP URL', () => {
+  const text = 'Visit http://example.com/path';
+  const iocs = toolkit.extractIOCs(text);
+  const url = iocs.find(i => i.type === 'URL');
+  assert.ok(url, 'HTTP URL not detected');
+});
+
+test('Detect HTTPS URL with query', () => {
+  const text = 'Visit https://secure.example.com/path?query=1&foo=bar';
+  const iocs = toolkit.extractIOCs(text);
+  const url = iocs.find(i => i.type === 'URL');
+  assert.ok(url, 'HTTPS URL not detected');
+});
+
+test('Detect URL with port', () => {
+  const text = 'Connect to http://example.com:8080/api';
+  const iocs = toolkit.extractIOCs(text);
+  const url = iocs.find(i => i.type === 'URL');
+  assert.ok(url && url.value.includes(':8080'), 'URL with port not detected');
+});
+
+test('Domain not duplicated from URL', () => {
+  const text = 'Visit https://example.com/path';
+  const iocs = toolkit.extractIOCs(text);
+  const url = iocs.find(i => i.type === 'URL');
+  const domain = iocs.find(i => i.type === 'Domain' && i.value === 'example.com');
+  assert.ok(url, 'URL should be detected');
+  assert.ok(!domain, 'Domain should not be duplicated from URL');
+});
+
+// ==================== Hash Tests ====================
+console.log('\n--- Hash Tests ---');
+
+test('Detect MD5 hash', () => {
+  const text = 'Hash: d41d8cd98f00b204e9800998ecf8427e';
+  const iocs = toolkit.extractIOCs(text);
+  const hash = iocs.find(i => i.type === 'MD5');
+  assert.ok(hash, 'MD5 not detected');
+});
+
+test('Detect SHA1 hash', () => {
+  const text = 'Hash: da39a3ee5e6b4b0d3255bfef95601890afd80709';
+  const iocs = toolkit.extractIOCs(text);
+  const hash = iocs.find(i => i.type === 'SHA1');
+  assert.ok(hash, 'SHA1 not detected');
+});
+
+test('Detect SHA256 hash', () => {
+  const text = 'Hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const iocs = toolkit.extractIOCs(text);
+  const hash = iocs.find(i => i.type === 'SHA256');
+  assert.ok(hash, 'SHA256 not detected');
+});
+
+test('Detect SHA512 hash', () => {
+  const text = 'Hash: cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e';
+  const iocs = toolkit.extractIOCs(text);
+  const hash = iocs.find(i => i.type === 'SHA512');
+  assert.ok(hash, 'SHA512 not detected');
+});
+
+test('Hash deduplication - SHA256 takes precedence', () => {
+  // A 64-char hex string could be both SHA256 and 2x MD5
+  const sha256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const text = `Hash: ${sha256}`;
+  const iocs = toolkit.extractIOCs(text);
+  const sha256Result = iocs.find(i => i.type === 'SHA256');
+  const md5Result = iocs.filter(i => i.type === 'MD5');
+  assert.ok(sha256Result, 'SHA256 should be detected');
+  assert.strictEqual(md5Result.length, 0, 'MD5 should not be duplicated from SHA256');
+});
+
+test('Hash is normalized to lowercase', () => {
+  const text = 'Hash: D41D8CD98F00B204E9800998ECF8427E';
+  const iocs = toolkit.extractIOCs(text);
+  const hash = iocs.find(i => i.type === 'MD5');
+  assert.ok(hash, 'MD5 not detected');
+  assert.ok(hash.value === hash.value.toLowerCase(), 'Hash should be lowercase');
+});
+
+// ==================== Email Tests ====================
+console.log('\n--- Email Tests ---');
+
+test('Detect email address', () => {
+  const text = 'Contact admin@example.com for help';
+  const iocs = toolkit.extractIOCs(text);
+  const email = iocs.find(i => i.type === 'Email');
+  assert.ok(email, 'Email not detected');
+});
+
+test('Detect email with plus', () => {
+  const text = 'Email: user+tag@example.com';
+  const iocs = toolkit.extractIOCs(text);
+  const email = iocs.find(i => i.type === 'Email');
+  assert.ok(email, 'Email with plus not detected');
+});
+
+// ==================== CVE Tests ====================
+console.log('\n--- CVE Tests ---');
+
+test('Detect CVE', () => {
+  const text = 'Vulnerability CVE-2021-44228 found';
+  const iocs = toolkit.extractIOCs(text);
+  const cve = iocs.find(i => i.type === 'CVE');
+  assert.ok(cve, 'CVE not detected');
+  assert.ok(cve.value === cve.value.toUpperCase(), 'CVE should be uppercase');
+});
+
+test('Detect CVE with 5 digits', () => {
+  const text = 'CVE-2023-12345';
+  const iocs = toolkit.extractIOCs(text);
+  const cve = iocs.find(i => i.type === 'CVE');
+  assert.ok(cve, 'CVE with 5 digits not detected');
+});
+
+// ==================== MITRE ATT&CK Tests ====================
+console.log('\n--- MITRE ATT&CK Tests ---');
+
+test('Detect MITRE Technique', () => {
+  const text = 'Technique T1566 used';
+  const iocs = toolkit.extractIOCs(text);
+  const mitre = iocs.find(i => i.type === 'MITRE');
+  assert.ok(mitre, 'MITRE not detected');
+});
+
+test('Detect MITRE Sub-technique', () => {
+  const text = 'Technique T1059.001 used';
+  const iocs = toolkit.extractIOCs(text);
+  const mitre = iocs.find(i => i.type === 'MITRE' && i.value === 'T1059.001');
+  assert.ok(mitre, 'MITRE sub-technique not detected');
+});
+
+test('MITRE is normalized to uppercase', () => {
+  const text = 'Technique t1566 used';
+  const iocs = toolkit.extractIOCs(text);
+  const mitre = iocs.find(i => i.type === 'MITRE');
+  assert.ok(mitre, 'MITRE not detected');
+  assert.ok(mitre.value === mitre.value.toUpperCase(), 'MITRE should be uppercase');
+});
+
+// ==================== Cryptocurrency Tests ====================
+console.log('\n--- Cryptocurrency Tests ---');
+
+test('Detect Bitcoin Legacy Address (P2PKH)', () => {
+  const text = 'Payment to 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
+  const iocs = toolkit.extractIOCs(text);
+  const btc = iocs.find(i => i.type === 'Bitcoin');
+  assert.ok(btc, 'Bitcoin legacy address not detected');
+});
+
+test('Detect Bitcoin P2SH Address', () => {
+  const text = 'Payment to 3J98t1WpEZ73CNmYviecrnyiWrnqRhWNLy';
+  const iocs = toolkit.extractIOCs(text);
+  const btc = iocs.find(i => i.type === 'Bitcoin');
+  assert.ok(btc, 'Bitcoin P2SH address not detected');
+});
+
+test('Detect Bitcoin Bech32 Address', () => {
+  const text = 'Payment to bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
+  const iocs = toolkit.extractIOCs(text);
+  const btc = iocs.find(i => i.type === 'Bitcoin');
+  assert.ok(btc, 'Bitcoin Bech32 address not detected');
+});
+
+test('Detect Ethereum Address', () => {
+  const text = 'Contract at 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
+  const iocs = toolkit.extractIOCs(text);
+  const eth = iocs.find(i => i.type === 'Ethereum');
+  assert.ok(eth, 'Ethereum not detected');
+});
+
+test('Ethereum is normalized to lowercase', () => {
+  const text = 'Contract at 0x742D35CC6634C0532925A3B844BC9E7595F0BEB0';
+  const iocs = toolkit.extractIOCs(text);
+  const eth = iocs.find(i => i.type === 'Ethereum');
+  assert.ok(eth, 'Ethereum not detected');
+  assert.ok(eth.value === eth.value.toLowerCase(), 'Ethereum should be lowercase');
+});
+
+// ==================== MAC Address Tests ====================
+console.log('\n--- MAC Address Tests ---');
+
+test('Detect MAC Address (colon)', () => {
+  const text = 'MAC: 00:1B:44:11:3A:B7';
+  const iocs = toolkit.extractIOCs(text);
+  const mac = iocs.find(i => i.type === 'MAC');
+  assert.ok(mac, 'MAC (colon) not detected');
+});
+
+test('Detect MAC Address (hyphen)', () => {
+  const text = 'MAC: 00-1B-44-11-3A-B7';
+  const iocs = toolkit.extractIOCs(text);
+  const mac = iocs.find(i => i.type === 'MAC');
+  assert.ok(mac, 'MAC (hyphen) not detected');
+});
+
+test('MAC is normalized to uppercase', () => {
+  const text = 'MAC: 00:1b:44:11:3a:b7';
+  const iocs = toolkit.extractIOCs(text);
+  const mac = iocs.find(i => i.type === 'MAC');
+  assert.ok(mac, 'MAC not detected');
+  assert.ok(mac.value === mac.value.toUpperCase(), 'MAC should be uppercase');
+});
+
+// ==================== Defang/Fang Tests ====================
+console.log('\n--- Defang/Fang Tests ---');
+
+test('Fang hxxp:// to http://', () => {
+  const text = 'hxxp://example.com';
+  const fanged = toolkit.fangText(text);
+  assert.ok(fanged.includes('http://'), 'hxxp should be fanged to http');
+});
+
+test('Fang [.] to .', () => {
+  const text = 'example[.]com';
+  const fanged = toolkit.fangText(text);
+  assert.ok(fanged.includes('example.com'), '[.] should be fanged to .');
+});
+
+test('Fang [at] to @', () => {
+  const text = 'user[at]example.com';
+  const fanged = toolkit.fangText(text);
+  assert.ok(fanged.includes('user@example.com'), '[at] should be fanged to @');
+});
+
+// ==================== Complex/Edge Cases ====================
+console.log('\n--- Complex/Edge Case Tests ---');
+
+test('Multiple IOC types in one text', () => {
+  const text = 'Alert: 192.168.1.1 contacted evil.com using hash d41d8cd98f00b204e9800998ecf8427e';
+  const iocs = toolkit.extractIOCs(text);
+  assert.ok(iocs.find(i => i.type === 'IPv4'), 'IPv4 should be detected');
+  assert.ok(iocs.find(i => i.type === 'Domain'), 'Domain should be detected');
+  assert.ok(iocs.find(i => i.type === 'MD5'), 'MD5 should be detected');
+});
+
+test('No false positives on random hex', () => {
+  const text = 'abc123'; // Too short for any hash
+  const iocs = toolkit.extractIOCs(text);
+  const hashes = iocs.filter(i => i.category === 'hash');
+  assert.strictEqual(hashes.length, 0, 'Short hex should not be detected as hash');
+});
+
+// ==================== Test Summary ====================
+console.log('\n========================================');
+console.log('Test Summary:');
+console.log('  Passed:', passed);
+console.log('  Failed:', failed);
+console.log('========================================');
+
+process.exit(failed > 0 ? 1 : 0);

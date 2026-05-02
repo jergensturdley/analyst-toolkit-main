@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "SOC Analyst Toolkit",
+  "version": "0.4",
+  "description": "A comprehensive toolkit for SOC analysts with IOC analysis, OSINT integration, and snippet management",
+
+  "permissions": [
+    "storage",
+    "clipboardWrite",
+    "contextMenus",
+    "notifications",
+    "activeTab"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SOC Analyst Toolkit",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Open SOC Analyst Toolkit"
+    },
+    
+    "toggle-snippets": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+T",
+        "mac": "Command+Shift+T"
+      },
+      "description": "Toggle snippet expansion on/off"
+    }
+  }
+}

@@ -1,0 +1,100 @@
+### Git ignore for SOC Analyst Toolkit (Chrome extension)
+
+# Node / package
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.*
+
+# Build / output
+dist/
+build/
+out/
+coverage/
+.cache/
+
+# Editor settings
+.vscode/
+.idea/
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Keys, packages, archives
+*.pem
+*.key
+*.p12
+*.crx
+*.zip
+
+# Temporary and test outputs
+tmp_test_output.txt
+tests/output_v3.txt
+tmp/
+*.log
+
+# Misc
+.history/
+.secret
+# SOC Analyst Toolkit - Development and Build Files
+.dev/
+content.js.backup
+content_old.js
+
+# Codacy CLI files (local analysis)
+.codacy/
+codacy.yaml
+cli-config.yaml
+
+# Node modules (if any)
+node_modules/
+
+# Environment files
+.github\
+.env
+.env.local
+
+# Build outputs
+dist/
+build/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+.codacy/logs/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# AI/Copilot instruction files (keep out of version control)
+.github/instructions/codacy.instructions.md
+.github/copilot-instructions.md
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
