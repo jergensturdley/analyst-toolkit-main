@@ -8,9 +8,11 @@ SOC Analyst Toolkit
 
 ## Short description (≤ 132 chars)
 
-Extract IOCs from selected text, run OSINT lookups across 20+ threat-intel platforms, manage snippets, and triage with AI. 100% local.
+Extract IOCs from selected text, run OSINT lookups across 20+ threat-intel platforms, manage snippets, and triage with AI.
 
 ## Detailed description
+
+SOC Analyst Toolkit is a free, open-source browser extension for SOC analysts and cybersecurity professionals. It extracts indicators of compromise (IOCs) from selected text, generates deep links to 20+ threat-intel platforms for one-click lookup, manages a personal snippet library, and offers an optional Ask AI panel that builds a triage prompt for the user's chosen AI chat.
 
 100% free, no in-app purchases, no subscriptions, no ads, no premium tier. MIT-licensed open source.
 
@@ -19,7 +21,7 @@ Extract IOCs from selected text, run OSINT lookups across 20+ threat-intel platf
 - Defang / refang, batch dedupe, per-type statistics
 
 ### OSINT Integration
-- 20+ platforms: VirusTotal, AbuseIPDB, urlscan.io, Shodan, Censys, GreyNoise, Hybrid Analysis, MAEC, MISP, ThreatConnect, IBM X-Force Exchange, Pulsedive, AlienVault OTX, ThreatBook, urlscan, PhishTank, VIPR,PolySwarm, urlquery, InQuest, IPinfo, Spur Context, Hydroflux
+Quick lookup against 20+ providers including VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, GreyNoise, Shodan, URLhaus, urlscan.io, MalwareBazaar, Hybrid Analysis, MITRE ATT&CK, D3FEND, blockchain explorers, MAC vendor databases. Configurable IP enrichment with caching and rate limits. Custom OSINT sources supported.
 
 ### Productivity
 - Personal searchable snippet library with prefix triggers
@@ -30,7 +32,7 @@ Extract IOCs from selected text, run OSINT lookups across 20+ threat-intel platf
 - 7 themes (Arc / Coffee / Monokai / Oceanic / Solarized / Earth / Midnight)
 
 ### Ask AI
-- Bring-your-own-key triage assistant: Paste any provider-compatible endpoint URL and key in Settings, select a model, and right-click selected text or an IOC to triage with AI. Prompts are configurable. No data is sent until you invoke AI, and the extension never sees your key.
+Replaces the older "Ask Claude" clipboard shortcut with a configurable helper. Pick a target AI chat from a preset dropdown (Claude / ChatGPT / Gemini / Copilot / Perplexity / Mistral / Custom…) and customize the prompt template via Settings. All processing is local; the extension never makes network calls without a user action.
 
 ### Privacy
 - All data stored locally in your browser
@@ -48,7 +50,7 @@ English
 
 ## Single-purpose justification
 
-The extension's single purpose is to help security analysts extract indicators of compromise (IOCs) from any web page and pivot to OSINT lookups and triage tools in a single click. Every feature — IOC detection, OSINT lookups, snippets, notes, text processing, CyberChef integration, and AI triage — exists to reduce manual copy/paste during incident response and threat research. No feature exists to monetize user behavior, collect usage data, or change the browser's core functionality.
+Triage security indicators of compromise. The extension extracts IOCs from selected text, generates deep links to 20+ OSINT providers for one-click lookup, manages analyst snippets, and offers an optional Ask AI panel that builds a triage prompt for the user's chosen AI chat. All processing is local; the only outbound network calls are user-initiated.
 
 ## Permission justifications
 
@@ -57,6 +59,7 @@ The extension's single purpose is to help security analysts extract indicators o
 - **`contextMenus`** — Adds the right-click "Analyze with SOC Toolkit" item and the OSINT-lookup submenu.
 - **`notifications`** — Surfaces background-task results (e.g. enrichment agent completion).
 - **`activeTab`** — Lets the context-menu actions read the current tab's selected text.
+- **`host_permissions: <all_urls>`** — Required because the OSINT links and enrichment agents target user-configurable third-party services (VirusTotal, ipinfo.io, AbuseIPDB, GreyNoise, etc.). Only the user-configured domains are contacted, only when the user clicks.
 
 ## Privacy policy URL
 
