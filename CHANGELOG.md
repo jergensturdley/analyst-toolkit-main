@@ -2,7 +2,10 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
-## [Unreleased]
+## [0.5.0] - 2026-07-08
+
+### Added
+- **Ask AI**: Copies a triage prompt — formatted from your current IOCs and the original raw input — to your clipboard and opens your chosen AI chat in a new tab. Configure the target URL and prompt template from the Ask AI section of Settings (preset dropdown covers Claude, ChatGPT, Gemini, Copilot, Perplexity, and Mistral; pick "Custom…" for any other URL). Custom templates support `{{iocs}}` and `{{rawInput}}` placeholders.
 
 ### Fixed
 - **CyberChef Integration**: Fixed URL encoding issue where highlighted text showed unexpected characters (e.g., %20, %21). CyberChef now correctly receives Base64 encoded input instead of URL encoded text.
