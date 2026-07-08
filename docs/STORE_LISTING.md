@@ -37,7 +37,7 @@ Replaces the older "Ask Claude" clipboard shortcut with a configurable helper. P
 ### Privacy
 - All data stored locally in your browser
 - No analytics, no telemetry, no fingerprinting
-- Network requests only when you initiate an OSINT lookup or invoke Ask AI
+- Network requests only when you initiate an OSINT lookup
 - Open source: review the code on GitHub
 
 ## Category
