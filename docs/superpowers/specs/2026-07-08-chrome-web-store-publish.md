@@ -62,7 +62,8 @@ Single Markdown file, ≤ 50 lines, written in user-facing language. Hosted via 
 
 Required content:
 
-- One-line summary: "SOC Analyst Toolkit does not collect, transmit, or sell user data."
+- One-line summary: "SOC Analyst Toolkit is free, with no in-app purchases, subscriptions, ads, upsells, or premium tiers. It does not collect, transmit, or sell user data."
+- Pricing: "The extension is 100% free. There are no in-app purchases, no subscriptions, no ads, no premium features, and no paid tier. The source is open (MIT license) on GitHub."
 - Data storage: "Settings, snippets, IOC history, and enrichment-agent results are stored locally in your browser via `chrome.storage.local`. They never leave your machine except when you explicitly initiate an OSINT lookup."
 - Network usage: "Outbound HTTP requests only occur when you click an OSINT lookup link, run an enrichment agent, or invoke the Ask AI flow. Requests go to the providers configured in Settings (default: VirusTotal, ipinfo.io, AbuseIPDB, GreyNoise, plus the user-configured Ask AI target URL)."
 - Third-party access: "The extension author has no access to user data."
@@ -96,6 +97,7 @@ Extract IOCs from selected text, run OSINT lookups across 20+ threat-intel platf
 Markdown body, ~250 words. Pulls from `README.md` and `FEATURES.md`. Sections:
 
 - One-paragraph pitch.
+- Free + open: "100% free, no in-app purchases, no subscriptions, no ads, no premium tier. MIT-licensed open source."
 - Feature bullets grouped: IOC Detection & Analysis / OSINT Integration / Productivity / Ask AI.
 - Privacy line ("All processing local; only user-initiated lookups hit the network").
 - Link to the GitHub repo for source.
