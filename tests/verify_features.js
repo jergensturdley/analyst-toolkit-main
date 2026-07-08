@@ -26,101 +26,133 @@ class SOCToolkitMock {
       /\.(jpg|png|gif|svg|pdf|doc|docx|xls|xlsx|zip|rar|tar|gz)$/i,
     ];
     this._labelPattern = /^[a-z0-9-]+$/i;
+
+    this.patterns = {
+      url: /\bhttps?:\/\/[\w.-]+(?::\d+)?(?:\/[\w\-._~:/?#[\]@!$&'()*+,;=%]*)?/gi,
+      ipv4: /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g,
+      ipv6: /(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+|::(?:ffff(?::0{1,4})?:)?(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9]))\b/gi,
+      cve: /\bCVE-\d{4}-\d{4,}\b/gi,
+      mitre: /\bT\d{4}(?:\.\d{3})?\b/gi,
+      btc: /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g,
+      eth: /\b0x[a-fA-F0-9]{40}\b/g,
+      mac: /\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g,
+      email: /\b[\w.+-]+@([\w-]+\.)+[\w-]{2,}\b/gi,
+      domain: /\b(?!https?:\/\/)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi,
+      md5: /\b[a-f0-9]{32}\b/gi,
+      sha1: /\b[a-f0-9]{40}\b/gi,
+      sha256: /\b[a-f0-9]{64}\b/gi,
+      sha512: /\b[a-f0-9]{128}\b/gi
+    };
   }
 
   extractIOCs(text) {
     const results = [];
     if (!text) return results;
 
-    const urlRe = /\bhttps?:\/\/[\w.-]+(?::\d+)?(?:\/[\w\-._~:\/?#[\]@!\$&'()*+,;=%]*)?/gi;
-    const ipv4Re = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
-    const ipv6Re = /\b(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+|::(?:ffff(?::0{1,4})?:)?(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9]))\b/gi;
-    const cveRe = /\bCVE-\d{4}-\d{4,}\b/gi;
-    const mitreRe = /\bT\d{4}(?:\.\d{3})?\b/gi;
-    const btcRe = /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g;
-    const ethRe = /\b0x[a-fA-F0-9]{40}\b/g;
-    const macRe = /\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g;
-    const emailRe = /\b[\w.+-]+@([\w-]+\.)+[\w-]{2,}\b/gi;
-    const domainRe = /\b(?!https?:\/\/)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi;
-    const md5Re = /\b[a-f0-9]{32}\b/gi;
-    const sha1Re = /\b[a-f0-9]{40}\b/gi;
-    const sha256Re = /\b[a-f0-9]{64}\b/gi;
-    const sha512Re = /\b[a-f0-9]{128}\b/gi;
-
-    const add = (type, value, category) => {
-      if (!value) return;
-      if (category === 'domain') {
-        if (this.isValidDomain(value)) {
-          results.push({ type, value, category });
-        }
-      } else if (category === 'ip') {
-        if (this.isValidIP(value)) {
-          results.push({ type, value, category });
-        }
-      } else {
-        results.push({ type, value, category });
-      }
-    };
-
-    (text.match(urlRe) || []).forEach(v => add('URL', v, 'url'));
-    (text.match(ipv4Re) || []).forEach(v => add('IPv4', v, 'ip'));
-    (text.match(ipv6Re) || []).forEach(v => add('IPv6', v.toLowerCase(), 'ip'));
-    (text.match(cveRe) || []).forEach(v => add('CVE', v.toUpperCase(), 'cve'));
-    (text.match(mitreRe) || []).forEach(v => add('MITRE', v.toUpperCase(), 'mitre'));
-    (text.match(btcRe) || []).forEach(v => add('Bitcoin', v, 'crypto'));
-    (text.match(ethRe) || []).forEach(v => add('Ethereum', v.toLowerCase(), 'crypto'));
-    (text.match(macRe) || []).forEach(v => add('MAC', v.toUpperCase(), 'mac'));
-    (text.match(emailRe) || []).forEach(v => add('Email', v, 'email'));
-
-    // Extract hashes - check longest first to avoid partial matches
-    const hashMatches = new Set();
-    
-    // SHA512 (128 chars)
-    (text.match(sha512Re) || []).forEach(v => {
-      const l = v.toLowerCase();
-      if (!hashMatches.has(l)) {
-        add('SHA512', l, 'hash');
-        hashMatches.add(l);
-      }
-    });
-    
-    // SHA256 (64 chars)
-    (text.match(sha256Re) || []).forEach(v => {
-      const l = v.toLowerCase();
-      if (!hashMatches.has(l)) {
-        add('SHA256', l, 'hash');
-        hashMatches.add(l);
-      }
-    });
-    
-    // SHA1 (40 chars)
-    (text.match(sha1Re) || []).forEach(v => {
-      const l = v.toLowerCase();
-      if (!hashMatches.has(l)) {
-        add('SHA1', l, 'hash');
-        hashMatches.add(l);
-      }
-    });
-    
-    // MD5 (32 chars)
-    (text.match(md5Re) || []).forEach(v => {
-      const l = v.toLowerCase();
-      if (!hashMatches.has(l)) {
-        add('MD5', l, 'hash');
-        hashMatches.add(l);
-      }
-    });
-
-    // Domains: avoid duplicating ones already part of URLs/emails
-    const existing = new Set(results.map(r => r.value.toLowerCase()));
-    (text.match(domainRe) || []).forEach(v => {
-      const l = v.toLowerCase();
-      if (!existing.has(l)) {
-        add('Domain', l, 'domain');
-      }
-    });
+    this._extractUrls(text, results);
+    this._extractNetworkIOCs(text, results);
+    this._extractSecurityIOCs(text, results);
+    this._extractFinancialIOCs(text, results);
+    this._extractHardwareIOCs(text, results);
+    this._extractHashes(text, results);
+    this._extractDomains(text, results);
 
     return results;
+  }
+
+  _addResult(results, type, value, category) {
+    if (!value) return;
+    if (category === 'domain') {
+      if (this.isValidDomain(value)) {
+        results.push({ type, value, category });
+      }
+    } else if (category === 'ip') {
+      if (this.isValidIP(value)) {
+        results.push({ type, value, category });
+      }
+    } else {
+      results.push({ type, value, category });
+    }
+  }
+
+  _extractUrls(text, results) {
+    (text.match(this.patterns.url) || []).forEach(v => {
+      this._addResult(results, 'URL', v, 'url');
+    });
+  }
+
+  _extractNetworkIOCs(text, results) {
+    (text.match(this.patterns.ipv4) || []).forEach(v => {
+      this._addResult(results, 'IPv4', v, 'ip');
+    });
+
+    (text.match(this.patterns.ipv6) || []).forEach(v => {
+      this._addResult(results, 'IPv6', v.toLowerCase(), 'ip');
+    });
+
+    (text.match(this.patterns.email) || []).forEach(v => {
+      this._addResult(results, 'Email', v, 'email');
+    });
+  }
+
+  _extractSecurityIOCs(text, results) {
+    (text.match(this.patterns.cve) || []).forEach(v => {
+      this._addResult(results, 'CVE', v.toUpperCase(), 'cve');
+    });
+
+    (text.match(this.patterns.mitre) || []).forEach(v => {
+      this._addResult(results, 'MITRE', v.toUpperCase(), 'mitre');
+    });
+  }
+
+  _extractFinancialIOCs(text, results) {
+    (text.match(this.patterns.btc) || []).forEach(v => {
+      this._addResult(results, 'Bitcoin', v, 'crypto');
+    });
+
+    (text.match(this.patterns.eth) || []).forEach(v => {
+      this._addResult(results, 'Ethereum', v.toLowerCase(), 'crypto');
+    });
+  }
+
+  _extractHardwareIOCs(text, results) {
+    (text.match(this.patterns.mac) || []).forEach(v => {
+      this._addResult(results, 'MAC', v.toUpperCase(), 'mac');
+    });
+  }
+
+  _extractHashes(text, results) {
+    const hashMatches = new Set();
+    const hashTypes = [
+      { type: 'SHA512', pattern: this.patterns.sha512 },
+      { type: 'SHA256', pattern: this.patterns.sha256 },
+      { type: 'SHA1', pattern: this.patterns.sha1 },
+      { type: 'MD5', pattern: this.patterns.md5 }
+    ];
+
+    for (const h of hashTypes) {
+      (text.match(h.pattern) || []).forEach(v => {
+        const l = v.toLowerCase();
+        if (!hashMatches.has(l)) {
+          this._addResult(results, h.type, l, 'hash');
+          hashMatches.add(l);
+        }
+      });
+    }
+  }
+
+  _extractDomains(text, results) {
+    const existing = new Set(results.map(r => r.value.toLowerCase()));
+    (text.match(this.patterns.domain) || []).forEach(v => {
+      const l = v.toLowerCase();
+      const isDuplicate = results.some(r => 
+        (r.category === 'url' || r.category === 'email') && 
+        r.value.toLowerCase().includes(l)
+      );
+      if (!existing.has(l) && !isDuplicate) {
+        this._addResult(results, 'Domain', l, 'domain');
+      }
+    });
   }
 
   // Production-matching domain validation
@@ -150,14 +182,88 @@ class SOCToolkitMock {
 
   isValidIP(ip) {
     if (!ip) return false;
-    const parts = ip.split('.');
-    if (parts.length !== 4) return false;
-    for (const part of parts) {
-      const num = parseInt(part, 10);
-      if (isNaN(num) || num < 0 || num > 255) return false;
-      if (part.length > 1 && part.startsWith('0')) return false;
+
+    // Check if it's an IPv4 address
+    if (ip.includes('.')) {
+      const parts = ip.split('.');
+      if (parts.length !== 4) return false;
+      for (const part of parts) {
+        const num = parseInt(part, 10);
+        if (isNaN(num) || num < 0 || num > 255) return false;
+        if (part.length > 1 && part.startsWith('0')) return false;
+      }
+      if (ip === '0.0.0.0' || ip === '255.255.255.255') return false;
+      return true;
     }
-    if (ip === '0.0.0.0' || ip === '255.255.255.255') return false;
+
+    // Check if it's an IPv6 address
+    if (ip.includes(':')) {
+      return this.isValidIPv6(ip);
+    }
+
+    return false;
+  }
+
+  // Helper function to validate IPv6 addresses
+  isValidIPv6(ip) {
+    if (!ip || typeof ip !== 'string') return false;
+
+    // Basic format checks
+    if (!ip.includes(':')) return false;
+    if (ip.length < 2) return false;
+
+    // Check for zone index (e.g., %eth0) - remove it for validation
+    const zoneIndex = ip.indexOf('%');
+    const addr = zoneIndex > 0 ? ip.substring(0, zoneIndex) : ip;
+
+    // Handle IPv4-mapped IPv6 addresses (::ffff:192.168.1.1)
+    if (addr.includes('.')) {
+      const ipv4Part = addr.substring(addr.lastIndexOf(':') + 1);
+      if (!this.isValidIP(ipv4Part)) return false;
+
+      // Replace IPv4 part with placeholder for further validation
+      const ipv6Part = addr.substring(0, addr.lastIndexOf(':') + 1) + '0:0';
+      return this.validateIPv6Hex(ipv6Part);
+    }
+
+    return this.validateIPv6Hex(addr);
+  }
+
+  // Validate the hex portions of an IPv6 address
+  validateIPv6Hex(addr) {
+    // Must have exactly one :: or exactly 7 colons
+    const doubleColonCount = (addr.match(/::/g) || []).length;
+    const colonCount = (addr.match(/:/g) || []).length;
+
+    if (doubleColonCount > 1) return false;  // Can't have more than one ::
+
+    if (doubleColonCount === 1) {
+      // With ::, we can have 1-7 colons total
+      if (colonCount < 1 || colonCount > 7) return false;
+    } else {
+      // Without ::, must have exactly 7 colons
+      if (colonCount !== 7) return false;
+    }
+
+    // Validate each hex group
+    const groups = addr.split(':');
+    let nonEmptyGroups = 0;
+
+    for (const group of groups) {
+      if (group === '') continue;  // Empty group is part of ::
+      if (group.length > 4) return false;  // Max 4 hex digits
+      if (!/^[0-9a-fA-F]+$/.test(group)) return false;  // Must be hex
+      nonEmptyGroups++;
+    }
+
+    // With ::, total groups (including implied) must be 8
+    if (doubleColonCount === 1) {
+      if (nonEmptyGroups >= 8) return false;
+    } else {
+      // Without ::, must have exactly 8 groups
+      if (groups.length !== 8) return false;
+    }
+
     return true;
   }
 
@@ -250,7 +356,7 @@ test('Detect full IPv6', () => {
   const text = 'IPv6: 2001:0db8:85a3:0000:0000:8a2e:0370:7334';
   const iocs = toolkit.extractIOCs(text);
   const ip = iocs.find(i => i.type === 'IPv6');
-  assert.ok(ip, 'Full IPv6 not detected');
+  assert.ok(ip, 'IPv6 not detected');
 });
 
 test('Detect compressed IPv6', () => {
@@ -565,6 +671,71 @@ test('No false positives on random hex', () => {
   const hashes = iocs.filter(i => i.category === 'hash');
   assert.strictEqual(hashes.length, 0, 'Short hex should not be detected as hash');
 });
+
+// ==================== Ask AI Config Tests ====================
+console.log('\n--- Ask AI Config Tests ---');
+
+function defaultAskAiConfig() {
+  return {
+    provider: 'anthropic',
+    anthropic:  { apiKey: '', model: 'claude-opus-4-8', baseUrl: 'https://api.anthropic.com' },
+    openai:     { apiKey: '', model: 'gpt-4o',          baseUrl: 'https://api.openai.com/v1' },
+    systemPrompt: ''
+  };
+}
+
+function validateAskAiConfig(cfg) {
+  if (!cfg || typeof cfg !== 'object') return { ok: false, error: 'Missing config' };
+  const provider = cfg.provider;
+  if (provider !== 'anthropic' && provider !== 'openai') {
+    return { ok: false, error: 'Invalid provider' };
+  }
+  const block = cfg[provider];
+  if (!block || typeof block !== 'object') return { ok: false, error: 'Missing provider block' };
+  const key = (block.apiKey || '').trim();
+  const model = (block.model || '').trim();
+  if (!key) return { ok: false, error: 'API key required' };
+  if (!model) return { ok: false, error: 'Model required' };
+  if (block.baseUrl) {
+    let u;
+    try { u = new URL(block.baseUrl); } catch { return { ok: false, error: 'Invalid baseUrl' }; }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      return { ok: false, error: 'baseUrl must be http(s)' };
+    }
+  }
+  return { ok: true };
+}
+
+function testAskAiConfig() {
+  assert.deepStrictEqual(defaultAskAiConfig().provider, 'anthropic');
+  assert.ok(validateAskAiConfig(defaultAskAiConfig()).ok === false, 'default (empty key) invalid');
+
+  const good = defaultAskAiConfig();
+  good.anthropic.apiKey = 'sk-x';
+  assert.ok(validateAskAiConfig(good).ok, 'anthropic with key ok');
+
+  const openai = defaultAskAiConfig();
+  openai.provider = 'openai';
+  openai.openai.apiKey = 'sk-y';
+  assert.ok(validateAskAiConfig(openai).ok, 'openai with key ok');
+
+  const badProvider = defaultAskAiConfig();
+  badProvider.provider = 'gemini';
+  badProvider.anthropic.apiKey = 'sk-x';
+  assert.ok(/provider/i.test(validateAskAiConfig(badProvider).error), 'bad provider rejected');
+
+  const badUrl = defaultAskAiConfig();
+  badUrl.anthropic.apiKey = 'sk-x';
+  badUrl.anthropic.baseUrl = 'ftp://nope';
+  assert.ok(/baseUrl/i.test(validateAskAiConfig(badUrl).error), 'bad baseUrl rejected');
+
+  const emptyModel = defaultAskAiConfig();
+  emptyModel.anthropic.apiKey = 'sk-x';
+  emptyModel.anthropic.model = '  ';
+  assert.ok(/model/i.test(validateAskAiConfig(emptyModel).error), 'empty model rejected');
+  console.log('  [PASS] Ask AI config validation');
+}
+testAskAiConfig();
 
 // ==================== Test Summary ====================
 console.log('\n========================================');

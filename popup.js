@@ -58,6 +58,27 @@ class SOCToolkit {
   async init() {
     this.setupEventListeners();
     this.setupSystemThemeListener(); // Listen for system theme changes
+    
+    // Initialize patterns
+    this.patterns = {
+      url: /\bhttps?:\/\/[\w.-]+(?::\d+)?(?:\/[\w\-._~:/?#[\]@!$&'()*+,;=%]*)?/gi,
+      ipv4: /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g,
+      // IPv6 pattern - handles full, compressed, and mixed formats. 
+      // Removed leading \b to better handle addresses following colons or brackets.
+      ipv6: /(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+|::(?:ffff(?::0{1,4})?:)?(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9]))\b/gi,
+      cve: /\bCVE-\d{4}-\d{4,}\b/gi,
+      mitre: /\bT\d{4}(?:\.\d{3})?\b/gi,
+      btc: /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g,
+      eth: /\b0x[a-fA-F0-9]{40}\b/g,
+      mac: /\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g,
+      email: /\b[\w.+-]+@([\w-]+\.)+[\w-]{2,}\b/gi,
+      domain: /\b(?!https?:\/\/)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi,
+      md5: /\b[a-f0-9]{32}\b/gi,
+      sha1: /\b[a-f0-9]{40}\b/gi,
+      sha256: /\b[a-f0-9]{64}\b/gi,
+      sha512: /\b[a-f0-9]{128}\b/gi
+    };
+
     // Load critical settings first, TLDs lazily
     await Promise.all([
       this.loadSettings(),
@@ -131,6 +152,54 @@ class SOCToolkit {
     this.switchTab('ioc');
     this.analyzeIOCs();
     this.showStatus('IOCs extracted and displayed', 'success');
+  }
+
+  // Helper for batch enrichment with a single tracking notification
+  async _batchEnrich(type, values) {
+    if (!values.length) return;
+    
+    const total = values.length;
+    let completed = 0;
+    let failed = 0;
+    
+    // Create a persistent progress notification
+    const note = document.createElement('div');
+    note.className = 'notification info persistent';
+    document.body.appendChild(note);
+    
+    const updateProgress = () => {
+      note.textContent = `Enriching ${type}s: ${completed}/${total}...`;
+    };
+    
+    updateProgress();
+
+    // Use a delay between requests to respect rate limits
+    const delay = type === 'url' ? 800 : 600;
+
+    for (let i = 0; i < values.length; i++) {
+      const val = values[i];
+      await new Promise(resolve => setTimeout(resolve, i === 0 ? 0 : delay));
+      
+      chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: type, ioc: val }, (res) => {
+        completed++;
+        if (!res || res.status === 'error') {
+          failed++;
+        } else if (res.nodes || res.edges) {
+          let nodeId = null;
+          if (this.graphNodes) {
+            this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === val) nodeId = n.id; });
+          }
+          if (nodeId) this.applyAgentResultToGraph(res, nodeId, val);
+        }
+        
+        if (completed === total) {
+          note.remove();
+          this.showNotification(`Enriched ${total - failed}/${total} ${type}s`, failed > 0 ? 'info' : 'success');
+        } else {
+          updateProgress();
+        }
+      });
+    }
   }
 
   setupEventListeners() {
@@ -486,24 +555,7 @@ class SOCToolkit {
         this.showNotification('No IP values found', 'info');
         return;
       }
-      this.showNotification(`Enriching ${ipValues.length} IPs...`, 'info');
-      ipValues.forEach((ip, i) => {
-        setTimeout(() => {
-          chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'ip', ioc: ip }, (res) => {
-            if (!res || res.status === 'error') return;
-            if (res.nodes || res.edges) {
-              let nodeId = null;
-              if (this.graphNodes) {
-                this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === ip) nodeId = n.id; });
-              }
-              if (nodeId) this.applyAgentResultToGraph(res, nodeId, ip);
-            }
-            if (i === ipValues.length - 1) {
-              this.showNotification(`Enriched ${ipValues.length} IPs`, 'success');
-            }
-          });
-        }, i * 600);
-      });
+      this._batchEnrich('ip', ipValues);
     });
 
     el('enrichAllHashesBtn')?.addEventListener('click', () => {
@@ -519,24 +571,7 @@ class SOCToolkit {
         this.showNotification('No hash values found', 'info');
         return;
       }
-      this.showNotification(`Enriching ${values.length} hash(es)...`, 'info');
-      values.forEach((hash, i) => {
-        setTimeout(() => {
-          chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'hash', ioc: hash }, (res) => {
-            if (!res || res.status === 'error') return;
-            if (res.nodes || res.edges) {
-              let nodeId = null;
-              if (this.graphNodes) {
-                this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === hash) nodeId = n.id; });
-              }
-              if (nodeId) this.applyAgentResultToGraph(res, nodeId, hash);
-            }
-            if (i === values.length - 1) {
-              this.showNotification(`Enriched ${values.length} hash(es)`, 'success');
-            }
-          });
-        }, i * 600);
-      });
+      this._batchEnrich('hash', values);
     });
 
     el('enrichAllDomainsBtn')?.addEventListener('click', () => {
@@ -550,24 +585,7 @@ class SOCToolkit {
         this.showNotification('No domain values found', 'info');
         return;
       }
-      this.showNotification(`Enriching ${values.length} domain(s)...`, 'info');
-      values.forEach((domain, i) => {
-        setTimeout(() => {
-          chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'domain', ioc: domain }, (res) => {
-            if (!res || res.status === 'error') return;
-            if (res.nodes || res.edges) {
-              let nodeId = null;
-              if (this.graphNodes) {
-                this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === domain) nodeId = n.id; });
-              }
-              if (nodeId) this.applyAgentResultToGraph(res, nodeId, domain);
-            }
-            if (i === values.length - 1) {
-              this.showNotification(`Enriched ${values.length} domain(s)`, 'success');
-            }
-          });
-        }, i * 600);
-      });
+      this._batchEnrich('domain', values);
     });
 
     el('enrichAllUrlsBtn')?.addEventListener('click', () => {
@@ -581,24 +599,7 @@ class SOCToolkit {
         this.showNotification('No URL values found', 'info');
         return;
       }
-      this.showNotification(`Enriching ${values.length} URL(s)...`, 'info');
-      values.forEach((url, i) => {
-        setTimeout(() => {
-          chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'url', ioc: url }, (res) => {
-            if (!res || res.status === 'error') return;
-            if (res.nodes || res.edges) {
-              let nodeId = null;
-              if (this.graphNodes) {
-                this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === url) nodeId = n.id; });
-              }
-              if (nodeId) this.applyAgentResultToGraph(res, nodeId, url);
-            }
-            if (i === values.length - 1) {
-              this.showNotification(`Enriched ${values.length} URL(s)`, 'success');
-            }
-          });
-        }, i * 800);
-      });
+      this._batchEnrich('url', values);
     });
 
     el('rateLimitDetails')?.addEventListener('toggle', (e) => {
@@ -716,6 +717,16 @@ class SOCToolkit {
     this.lastIOCs = iocs;
     this.lastIOCInput = input;
     this.displayIOCResults(iocs);
+
+    // Persist last analysis results
+    try {
+      chrome.storage.local.set({ 
+        lastAnalysisResults: iocs,
+        savedIOCInput: input
+      });
+    } catch (e) {
+      console.error('Failed to persist analysis results:', e);
+    }
   }
 
   displayIOCResults(iocs) {
@@ -745,7 +756,7 @@ class SOCToolkit {
       const truncatedValue = this.truncateText(ioc.value, 40);
 
       htmlParts.push(`
-        <div class="ioc-item">
+        <div class="ioc-item" data-value="${escapedValue}" data-type="${ioc.category.toLowerCase()}">
           <input type="checkbox" class="ioc-select" />
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
@@ -753,6 +764,10 @@ class SOCToolkit {
                 ${truncatedValue}
               </div>
               <span class="ioc-type type-${ioc.category.toLowerCase()}">${ioc.type}</span>
+              <div class="ioc-actions" style="margin-left: auto; display: flex; gap: 4px;">
+                <button class="defang-item-btn" title="Defang this IOC"><i class="fa-solid fa-shield-halved"></i></button>
+                <button class="refang-item-btn" title="Refang this IOC"><i class="fa-solid fa-link"></i></button>
+              </div>
             </div>
             <div class="osint-links">
               ${osintLinks.map(link => `
@@ -772,8 +787,8 @@ class SOCToolkit {
     const countEl = resultsContainer.querySelector('.ioc-count');
     if (countEl) countEl.textContent = `IOC Results [${iocs.length}]`;
 
-    // Add event listeners for copy functionality
-    this.setupCopyEventListeners();
+    // Add event listeners for results
+    this.setupResultEventListeners();
 
     // Generate and display IOC correlation graph
     if (this.enableGraph) {
@@ -1357,7 +1372,7 @@ Formatting rules:
   async loadSettings() {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'greynoiseApiKey', 'urlscanApiKey'], (res) => {
+        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'greynoiseApiKey', 'urlscanApiKey'], (res) => {
           const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc' };
           const s = res.socSettings || defaults;
           this.autoAnalyze = s.autoAnalyze ?? true;
@@ -1403,6 +1418,13 @@ Formatting rules:
             if (iocInput) {
               iocInput.value = res.savedIOCInput;
             }
+          }
+
+          // Restore last analysis results if present
+          if (res.lastAnalysisResults && Array.isArray(res.lastAnalysisResults) && res.lastAnalysisResults.length > 0) {
+            this.lastIOCs = res.lastAnalysisResults;
+            this.lastIOCInput = res.savedIOCInput || '';
+            this.displayIOCResults(this.lastIOCs);
           }
 
           // Load bulk link preference
@@ -1478,6 +1500,38 @@ Formatting rules:
     } catch (e) {
       console.error('Failed to save settings:', e);
     }
+  }
+
+  // --- Ask AI config ---
+  defaultAskAiConfig() {
+    return {
+      provider: 'anthropic',
+      anthropic:  { apiKey: '', model: 'claude-opus-4-8', baseUrl: 'https://api.anthropic.com' },
+      openai:     { apiKey: '', model: 'gpt-4o',          baseUrl: 'https://api.openai.com/v1' },
+      systemPrompt: ''
+    };
+  }
+
+  validateAskAiConfig(cfg) {
+    if (!cfg || typeof cfg !== 'object') return { ok: false, error: 'Missing config' };
+    const provider = cfg.provider;
+    if (provider !== 'anthropic' && provider !== 'openai') {
+      return { ok: false, error: 'Invalid provider' };
+    }
+    const block = cfg[provider];
+    if (!block || typeof block !== 'object') return { ok: false, error: 'Missing provider block' };
+    const key = (block.apiKey || '').trim();
+    const model = (block.model || '').trim();
+    if (!key) return { ok: false, error: 'API key required' };
+    if (!model) return { ok: false, error: 'Model required' };
+    if (block.baseUrl) {
+      let u;
+      try { u = new URL(block.baseUrl); } catch { return { ok: false, error: 'Invalid baseUrl' }; }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return { ok: false, error: 'baseUrl must be http(s)' };
+      }
+    }
+    return { ok: true };
   }
 
   // === Theme Management ===
@@ -1707,7 +1761,7 @@ Formatting rules:
 
 
   // === IOC helpers ===
-  setupCopyEventListeners() {
+  setupResultEventListeners() {
     document.querySelectorAll('.ioc-value').forEach(el => {
       el.addEventListener('click', () => {
         const text = el.getAttribute('data-copy') || el.textContent.trim();
@@ -1738,6 +1792,24 @@ Formatting rules:
         }
       });
     });
+
+    // Defang/Refang single item handlers
+    document.querySelectorAll('.defang-item-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.ioc-item');
+        if (!item) return;
+        const value = item.getAttribute('data-value') || '';
+        this.defangSingleIOC(value, item);
+      });
+    });
+    document.querySelectorAll('.refang-item-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.ioc-item');
+        if (!item) return;
+        const value = item.getAttribute('data-value') || '';
+        this.refangSingleIOC(value, item);
+      });
+    });
   }
 
   clearIOCs() {
@@ -1745,8 +1817,8 @@ Formatting rules:
     const input = document.getElementById('iocInput');
     if (input) {
       input.value = '';
-      // Clear saved IOC input from storage
-      chrome.storage.local.remove('savedIOCInput');
+      // Clear saved IOC input and last results from storage
+      chrome.storage.local.remove(['savedIOCInput', 'lastAnalysisResults']);
     }
 
     // Clear the graph visualization
@@ -1932,6 +2004,38 @@ Formatting rules:
   }
 
   // === Defang / Fang ===
+  // Defang a single IOC value
+  defangSingleIOC(iocValue, itemEl) {
+    if (!iocValue || !itemEl) return;
+    const defanged = this.defangText(iocValue);
+    this._updateIOCValueInItem(itemEl, defanged);
+    this.showNotification('IOC defanged', 'success');
+  }
+
+  // Refang a single IOC value
+  refangSingleIOC(iocValue, itemEl) {
+    if (!iocValue || !itemEl) return;
+    const fanged = this.fangText(iocValue);
+    this._updateIOCValueInItem(itemEl, fanged);
+    this.showNotification('IOC refanged', 'success');
+  }
+
+  // Internal helper to update the UI for a single IOC item
+  _updateIOCValueInItem(itemEl, newValue) {
+    const valueEl = itemEl.querySelector('.ioc-value');
+    if (!valueEl) return;
+
+    const escapedNewValue = this.escapeHtml(newValue);
+    const truncatedNewValue = this.truncateText(newValue, 40);
+
+    valueEl.setAttribute('data-copy', escapedNewValue);
+    valueEl.textContent = truncatedNewValue;
+    valueEl.title = 'Click to copy';
+    
+    // Also update data-value on the item if present
+    itemEl.setAttribute('data-value', newValue);
+  }
+
   defangIOCsInInput() {
     const ta = document.getElementById('iocInput');
     if (!ta) return;
@@ -2155,162 +2259,129 @@ Formatting rules:
     if (!text) return results;
     text = this.deobfuscateText(text);
 
-    // Enhanced patterns for better IOC detection
-    const urlRe = /\bhttps?:\/\/[\w.-]+(?::\d+)?(?:\/[\w\-._~:/?#[\]@!$&'()*+,;=%]*)?/gi;
-    const ipv4Re = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
-
-    // IPv6 pattern - matches full, compressed, and mixed formats
-    const ipv6Re = /\b(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+|::(?:ffff(?::0{1,4})?:)?(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9]))\b/gi;
-
-    // CVE pattern - matches CVE-YYYY-NNNNN format
-    const cveRe = /\bCVE-\d{4}-\d{4,}\b/gi;
-
-    // MITRE ATT&CK Technique IDs (T1234, T1234.567)
-    const mitreRe = /\bT\d{4}(?:\.\d{3})?\b/gi;
-
-    // Bitcoin addresses (legacy P2PKH, P2SH, and Bech32)
-    const btcRe = /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g;
-
-    // Ethereum addresses (0x followed by 40 hex chars)
-    const ethRe = /\b0x[a-fA-F0-9]{40}\b/g;
-
-    // MAC addresses (various formats)
-    const macRe = /\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g;
-
-    const emailRe = /\b[\w.+-]+@([\w-]+\.)+[\w-]{2,}\b/gi;
-    // Improved domain regex: limit TLD to 2-24 chars and require at least one subdomain
-    const domainRe = /\b(?!https?:\/\/)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi;
-
-    // Hash patterns - support MD5 (32), SHA1 (40), SHA256 (64), and SHA512 (128) hex characters
-    const md5Re = /\b[a-f0-9]{32}\b/gi;
-    const sha1Re = /\b[a-f0-9]{40}\b/gi;
-    const sha256Re = /\b[a-f0-9]{64}\b/gi;
-    const sha512Re = /\b[a-f0-9]{128}\b/gi;
-
-    const add = (type, value, category) => {
-      if (!value) return;
-      // Additional validation for specific categories
-      if (category === 'domain') {
-        if (this.isValidDomain(value)) {
-          results.push({ type, value, category });
-        }
-      } else if (category === 'ip') {
-        if (this.isValidIP(value)) {
-          results.push({ type, value, category });
-        }
-      } else {
-        results.push({ type, value, category });
-      }
-    };
-
-    // Extract URLs first
-    const urls = text.match(urlRe) || [];
-    for (const v of urls) {
-      add('URL', v, 'url');
-    }
-
-    // Extract IPs
-    const ips = text.match(ipv4Re) || [];
-    for (const v of ips) {
-      add('IPv4', v, 'ip');
-    }
-    // Extract IPv6 addresses
-    const ipv6s = text.match(ipv6Re) || [];
-    for (const v of ipv6s) {
-      if (this.isValidIPv6(v)) {
-        add('IPv6', v.toLowerCase(), 'ip');
-      }
-    }
-
-    // Extract CVEs
-    const cves = text.match(cveRe) || [];
-    for (const v of cves) {
-      add('CVE', v.toUpperCase(), 'cve');
-    }
-
-    // Extract MITRE ATT&CK Techniques
-    const mitres = text.match(mitreRe) || [];
-    for (const v of mitres) {
-      add('MITRE', v.toUpperCase(), 'mitre');
-    }
-
-    // Extract Bitcoin addresses
-    const btcAddresses = text.match(btcRe) || [];
-    for (const v of btcAddresses) {
-      add('Bitcoin', v, 'crypto');
-    }
-
-    // Extract Ethereum addresses
-    const ethAddresses = text.match(ethRe) || [];
-    for (const v of ethAddresses) {
-      // Ethereum addresses are exactly 42 characters (0x + 40 hex)
-      // This naturally excludes longer hashes
-      add('Ethereum', v.toLowerCase(), 'crypto');
-    }
-
-    // Extract MAC addresses
-    const macs = text.match(macRe) || [];
-    for (const v of macs) {
-      add('MAC', v.toUpperCase(), 'mac');
-    }
-
-    // Extract emails
-    const emails = text.match(emailRe) || [];
-    for (const v of emails) {
-      add('Email', v, 'email');
-    }
-
-    // Extract hashes - check longest first to avoid partial matches
-    const hashMatches = new Set();
-    // SHA512 (128 chars) - check first
-    const sha512Matches = text.match(sha512Re) || [];
-    for (const v of sha512Matches) {
-      const lowerHash = v.toLowerCase();
-      if (!hashMatches.has(lowerHash)) {
-        add('SHA512', lowerHash, 'hash');
-        hashMatches.add(lowerHash);
-      }
-    }
-    const sha256Matches = text.match(sha256Re) || [];
-    for (const v of sha256Matches) {
-      const lowerHash = v.toLowerCase();
-      if (!hashMatches.has(lowerHash)) {
-        add('SHA256', lowerHash, 'hash');
-        hashMatches.add(lowerHash);
-      }
-    }
-    const sha1Matches = text.match(sha1Re) || [];
-    for (const v of sha1Matches) {
-      const lowerHash = v.toLowerCase();
-      if (!hashMatches.has(lowerHash)) {
-        add('SHA1', lowerHash, 'hash');
-        hashMatches.add(lowerHash);
-      }
-    }
-    const md5Matches = text.match(md5Re) || [];
-    for (const v of md5Matches) {
-      const lowerHash = v.toLowerCase();
-      if (!hashMatches.has(lowerHash)) {
-        add('MD5', lowerHash, 'hash');
-        hashMatches.add(lowerHash);
-      }
-    }
-
-    // Domains: avoid duplicating ones already part of URLs/emails
-    const existing = new Set();
-    for (const r of results) {
-      existing.add(r.value.toLowerCase());
-    }
-
-    const domains = text.match(domainRe) || [];
-    for (const v of domains) {
-      const lowerDomain = v.toLowerCase();
-      if (!existing.has(lowerDomain)) {
-        add('Domain', lowerDomain, 'domain');
-      }
-    }
+    // Modularized extraction
+    this._extractUrls(text, results);
+    this._extractNetworkIOCs(text, results);
+    this._extractSecurityIOCs(text, results);
+    this._extractFinancialIOCs(text, results);
+    this._extractHardwareIOCs(text, results);
+    this._extractHashes(text, results);
+    this._extractDomains(text, results);
 
     return results;
+  }
+
+  _addResult(results, type, value, category) {
+    if (!value) return;
+    
+    // Additional validation for specific categories
+    if (category === 'domain') {
+      if (this.isValidDomain(value)) {
+        results.push({ type, value, category });
+      }
+    } else if (category === 'ip') {
+      if (this.isValidIP(value)) {
+        results.push({ type, value, category });
+      }
+    } else {
+      results.push({ type, value, category });
+    }
+  }
+
+  _extractUrls(text, results) {
+    (text.match(this.patterns.url) || []).forEach(v => {
+      this._addResult(results, 'URL', v, 'url');
+    });
+  }
+
+  _extractNetworkIOCs(text, results) {
+    // IPv4
+    (text.match(this.patterns.ipv4) || []).forEach(v => {
+      this._addResult(results, 'IPv4', v, 'ip');
+    });
+
+    // IPv6
+    (text.match(this.patterns.ipv6) || []).forEach(v => {
+      if (this.isValidIPv6(v)) {
+        this._addResult(results, 'IPv6', v.toLowerCase(), 'ip');
+      }
+    });
+
+    // Emails
+    (text.match(this.patterns.email) || []).forEach(v => {
+      this._addResult(results, 'Email', v, 'email');
+    });
+  }
+
+  _extractSecurityIOCs(text, results) {
+    // CVEs
+    (text.match(this.patterns.cve) || []).forEach(v => {
+      this._addResult(results, 'CVE', v.toUpperCase(), 'cve');
+    });
+
+    // MITRE ATT&CK
+    (text.match(this.patterns.mitre) || []).forEach(v => {
+      this._addResult(results, 'MITRE', v.toUpperCase(), 'mitre');
+    });
+  }
+
+  _extractFinancialIOCs(text, results) {
+    // Bitcoin
+    (text.match(this.patterns.btc) || []).forEach(v => {
+      this._addResult(results, 'Bitcoin', v, 'crypto');
+    });
+
+    // Ethereum
+    (text.match(this.patterns.eth) || []).forEach(v => {
+      this._addResult(results, 'Ethereum', v.toLowerCase(), 'crypto');
+    });
+  }
+
+  _extractHardwareIOCs(text, results) {
+    (text.match(this.patterns.mac) || []).forEach(v => {
+      this._addResult(results, 'MAC', v.toUpperCase(), 'mac');
+    });
+  }
+
+  _extractHashes(text, results) {
+    const hashMatches = new Set();
+    
+    // Order: longest to shortest to avoid partial matches
+    const hashTypes = [
+      { type: 'SHA512', pattern: this.patterns.sha512 },
+      { type: 'SHA256', pattern: this.patterns.sha256 },
+      { type: 'SHA1', pattern: this.patterns.sha1 },
+      { type: 'MD5', pattern: this.patterns.md5 }
+    ];
+
+    for (const h of hashTypes) {
+      (text.match(h.pattern) || []).forEach(v => {
+        const lower = v.toLowerCase();
+        if (!hashMatches.has(lower)) {
+          this._addResult(results, h.type, lower, 'hash');
+          hashMatches.add(lower);
+        }
+      });
+    }
+  }
+
+  _extractDomains(text, results) {
+    const existing = new Set(results.map(r => r.value.toLowerCase()));
+    
+    (text.match(this.patterns.domain) || []).forEach(v => {
+      const lower = v.toLowerCase();
+      
+      // Improved deduplication: check if domain is part of an already extracted URL or Email
+      const isDuplicate = results.some(r => 
+        (r.category === 'url' || r.category === 'email') && 
+        r.value.toLowerCase().includes(lower)
+      );
+
+      if (!existing.has(lower) && !isDuplicate) {
+        this._addResult(results, 'Domain', lower, 'domain');
+        existing.add(lower);
+      }
+    });
   }
 
   // Helper function to validate domains and reduce false positives
