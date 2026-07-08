@@ -737,6 +737,187 @@ function testAskAiConfig() {
 }
 testAskAiConfig();
 
+// ==================== Ask AI Config + Prompt Builder Tests ====================
+console.log('\n--- Ask AI Config + Prompt Builder Tests ---');
+
+// These free functions are duplicated from popup.js for testing in plain Node.
+// Keep them byte-for-byte identical to the popup.js versions.
+function buildDefaultIocTable(grouped) {
+  const labelMap = {
+    ip: 'IP addresses', domain: 'Domains', url: 'URLs', hostname: 'Hostnames',
+    hash: 'File hashes', email: 'Emails', cve: 'CVEs', mitre: 'MITRE ATT&CK techniques',
+    crypto: 'Cryptocurrency addresses', mac: 'MAC addresses'
+  };
+  const linkMap = {
+    ip: v => `[VT](https://www.virustotal.com/gui/ip-address/${v})`,
+    domain: v => `[VT](https://www.virustotal.com/gui/domain/${v})`,
+    url: v => `[urlscan](https://urlscan.io/search/${encodeURIComponent('task.url:"' + v + '"')})`,
+    hostname: v => `[VT](https://www.virustotal.com/gui/domain/${v})`,
+    hash: v => `[VT](https://www.virustotal.com/gui/file/${v})`,
+    email: v => `[Hunter](https://hunter.io/email-verifier/${v})`,
+    cve: v => `[NVD](https://nvd.nist.gov/vuln/detail/${v})`,
+    mitre: v => `[MITRE](https://attack.mitre.org/techniques/${v.replace('.', '/')}/)`,
+    crypto: v => `[Blockchain](https://www.blockchain.com/explorer/search?search=${v})`,
+    mac: v => `[MAC Vendors](https://macvendors.com/query/${v})`
+  };
+  const sections = [];
+  for (const key of Object.keys(labelMap)) {
+    const values = grouped[key] || [];
+    if (!values.length) continue;
+    const rows = values.map(v => `| \`${v}\` | ${linkMap[key](v)} |`).join('\n');
+    sections.push(`### ${labelMap[key]}\n\n| Indicator | Lookup |\n| --- | --- |\n${rows}`);
+  }
+  return sections.join('\n\n');
+}
+
+function buildTriagePrompt(iocs, rawInput, template) {
+  const fmtIocs = iocs.map(i => `[${i.category}]: ${i.value}`).join('\n');
+  const table = (() => {
+    const grouped = {};
+    for (const i of iocs) {
+      const key = i.category in { ip:1, domain:1, url:1, hostname:1, hash:1, email:1, cve:1, mitre:1, crypto:1, mac:1 } ? i.category : 'hostname';
+      (grouped[key] = grouped[key] || []).push(i.value);
+    }
+    return buildDefaultIocTable(grouped);
+  })();
+
+  if (!template) {
+    return [
+      'You are a SOC analyst triaging the following IOCs.',
+      '',
+      '## Indicators',
+      '',
+      table,
+      '',
+      '## Raw input',
+      '',
+      rawInput || '(none)'
+    ].join('\n');
+  }
+
+  let out = template;
+  if (out.includes('{{iocs}}')) {
+    out = out.split('{{iocs}}').join(fmtIocs);
+  } else {
+    out += '\n\n## Indicators\n\n' + fmtIocs;
+  }
+  if (out.includes('{{rawInput}}')) {
+    out = out.split('{{rawInput}}').join(rawInput || '');
+  } else {
+    if (rawInput) out += '\n\n## Raw input\n\n' + rawInput;
+  }
+  return out;
+}
+
+const askAiPresets = [
+  { label: 'Claude',         url: 'https://claude.ai/new' },
+  { label: 'ChatGPT',        url: 'https://chatgpt.com/' },
+  { label: 'Gemini',         url: 'https://gemini.google.com/app' },
+  { label: 'Copilot',        url: 'https://copilot.microsoft.com/' },
+  { label: 'Perplexity',     url: 'https://www.perplexity.ai/' },
+  { label: 'Mistral (Le Chat)', url: 'https://chat.mistral.ai/chat' }
+];
+
+const askAiDefaultConfig = () => ({ targetUrl: 'https://claude.ai/new', promptTemplate: '' });
+
+function resolveAskAiPreset(url) {
+  const match = askAiPresets.find(p => p.url === url);
+  return match ? match.label : 'Custom…';
+}
+
+function validateAskAiTargetUrl(url) {
+  if (!url || typeof url !== 'string') return { ok: false, error: 'Target URL required' };
+  let u;
+  try { u = new URL(url); } catch { return { ok: false, error: 'Invalid URL' }; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return { ok: false, error: 'URL must be http(s)' };
+  return { ok: true };
+}
+
+// Tests
+test('buildTriagePrompt: default template includes IOC table and raw input', () => {
+  const iocs = [
+    { category: 'ip', value: '1.2.3.4', type: 'IP' },
+    { category: 'domain', value: 'evil.example', type: 'Domain' }
+  ];
+  const out = buildTriagePrompt(iocs, 'found in alert XYZ', undefined);
+  assert.ok(out.includes('IP addresses'), 'has IP section');
+  assert.ok(out.includes('Domains'), 'has Domain section');
+  assert.ok(out.includes('1.2.3.4'), 'includes IOC value');
+  assert.ok(out.includes('evil.example'), 'includes second IOC');
+  assert.ok(out.includes('found in alert XYZ'), 'includes raw input');
+});
+
+test('buildTriagePrompt: empty raw input renders "(none)"', () => {
+  const out = buildTriagePrompt([{ category: 'ip', value: '5.6.7.8', type: 'IP' }], '', undefined);
+  assert.ok(out.includes('(none)'), 'empty raw input renders (none)');
+});
+
+test('buildTriagePrompt: custom template substitutes {{iocs}} and {{rawInput}}', () => {
+  const out = buildTriagePrompt(
+    [{ category: 'ip', value: '9.9.9.9', type: 'IP' }],
+    'raw text here',
+    'Triage this:\n{{iocs}}\nContext: {{rawInput}}'
+  );
+  assert.ok(out.includes('9.9.9.9'), 'IOC substituted');
+  assert.ok(out.includes('raw text here'), 'raw input substituted');
+  assert.ok(!out.includes('{{iocs}}'), 'placeholder removed');
+  assert.ok(!out.includes('{{rawInput}}'), 'placeholder removed');
+});
+
+test('buildTriagePrompt: template missing {{iocs}} still gets IOC list appended', () => {
+  const out = buildTriagePrompt(
+    [{ category: 'ip', value: '7.7.7.7', type: 'IP' }],
+    'context',
+    'Just analyze this:'
+  );
+  assert.ok(out.includes('Just analyze this:'), 'user template kept');
+  assert.ok(out.includes('7.7.7.7'), 'IOC appended');
+});
+
+test('buildTriagePrompt: template missing {{rawInput}} still gets raw input appended', () => {
+  const out = buildTriagePrompt(
+    [{ category: 'ip', value: '7.7.7.7', type: 'IP' }],
+    'context ABC',
+    '{{iocs}}'
+  );
+  assert.ok(out.includes('7.7.7.7'), 'IOC substituted');
+  assert.ok(out.includes('context ABC'), 'raw input appended');
+});
+
+test('resolveAskAiPreset: known URL resolves to label', () => {
+  assert.strictEqual(resolveAskAiPreset('https://claude.ai/new'), 'Claude');
+  assert.strictEqual(resolveAskAiPreset('https://chatgpt.com/'), 'ChatGPT');
+  assert.strictEqual(resolveAskAiPreset('https://gemini.google.com/app'), 'Gemini');
+  assert.strictEqual(resolveAskAiPreset('https://copilot.microsoft.com/'), 'Copilot');
+  assert.strictEqual(resolveAskAiPreset('https://www.perplexity.ai/'), 'Perplexity');
+  assert.strictEqual(resolveAskAiPreset('https://chat.mistral.ai/chat'), 'Mistral (Le Chat)');
+});
+
+test('resolveAskAiPreset: unknown URL resolves to Custom…', () => {
+  assert.strictEqual(resolveAskAiPreset('https://example.com/chat'), 'Custom…');
+  assert.strictEqual(resolveAskAiPreset(''), 'Custom…');
+});
+
+test('validateAskAiTargetUrl: accepts http(s)', () => {
+  assert.deepStrictEqual(validateAskAiTargetUrl('https://claude.ai/new'), { ok: true });
+  assert.deepStrictEqual(validateAskAiTargetUrl('http://example.com/x'), { ok: true });
+});
+
+test('validateAskAiTargetUrl: rejects empty / non-http(s)', () => {
+  assert.strictEqual(validateAskAiTargetUrl('').ok, false);
+  assert.strictEqual(validateAskAiTargetUrl('javascript:alert(1)').ok, false);
+  assert.strictEqual(validateAskAiTargetUrl('ftp://x.com').ok, false);
+  assert.strictEqual(validateAskAiTargetUrl('not a url').ok, false);
+});
+
+test('askAiDefaultConfig: defaults to claude.ai/new, empty template', () => {
+  const c = askAiDefaultConfig();
+  assert.strictEqual(c.targetUrl, 'https://claude.ai/new');
+  assert.strictEqual(c.promptTemplate, '');
+});
+
+console.log(' [PASS] Ask AI config + prompt builder');
+
 // ==================== Test Summary ====================
 console.log('\n========================================');
 console.log('Test Summary:');
