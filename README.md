@@ -51,6 +51,7 @@ This extension provides a suite of tools to accelerate the investigation of secu
   - Support for custom/self-hosted CyberChef instances
   - Configurable URL in settings
 - **Export Options**: Export IOCs in multiple formats (CSV, JSON, Markdown, Obsidian-compatible)
+- **Ask AI**: Copies a triage prompt — formatted from your current IOCs and the original raw input — to your clipboard and opens your chosen AI chat in a new tab. Configure the target URL and prompt template from the Ask AI section of Settings (preset dropdown covers Claude, ChatGPT, Gemini, Copilot, Perplexity, and Mistral; pick "Custom…" for any other URL). Custom templates support `{{iocs}}` and `{{rawInput}}` placeholders.
 - **Keyboard Shortcuts**: Efficient workflow with customizable hotkeys
 - **Modern Themes**: 7 Bearded-inspired themes optimized for extended use:
   - Arc (Default - GitHub-inspired)
