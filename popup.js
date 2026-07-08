@@ -482,7 +482,7 @@ class SOCToolkit {
     // --- IOC Results Panel controls ---
     el('copyAllBtn')?.addEventListener('click', () => this.copyAllIOCs());
     el('clearGraphBtn')?.addEventListener('click', () => this.clearGraph());
-    el('askClaudeBtn')?.addEventListener('click', () => this.askClaude());
+    el('askAiBtn')?.addEventListener('click', () => this.askAi());
 
     document.querySelectorAll('#exportMenu .dropdown-item').forEach(item => {
       item.addEventListener('click', (e) => {
@@ -1014,7 +1014,7 @@ class SOCToolkit {
     this.copyToClipboard(values.join('\n'));
   }
 
-  askClaude() {
+  askAi() {
     const iocs = this.lastIOCs;
     if (!iocs || iocs.length === 0) {
       this.showNotification('No IOCs to analyze — run analysis first', 'error');
