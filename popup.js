@@ -586,13 +586,15 @@ class SOCToolkit {
       }
     });
     askAiPromptTemplate?.addEventListener('change', async (e) => {
-      await this.saveAskAiConfig({ targetUrl: askAiTargetUrl ? askAiTargetUrl.value.trim() : '', promptTemplate: e.target.value });
-      this.showNotification('Ask AI prompt template saved', 'success');
+      const ok = await this.saveAskAiConfig({ targetUrl: askAiTargetUrl ? askAiTargetUrl.value.trim() : '', promptTemplate: e.target.value });
+      if (ok) this.showNotification('Ask AI prompt template saved', 'success');
     });
     askAiResetBtn?.addEventListener('click', async () => {
-      if (askAiPromptTemplate) askAiPromptTemplate.value = '';
-      await this.saveAskAiConfig({ targetUrl: askAiTargetUrl ? askAiTargetUrl.value.trim() : '', promptTemplate: '' });
-      this.showNotification('Prompt template reset to default', 'success');
+      const ok = await this.saveAskAiConfig({ targetUrl: askAiTargetUrl ? askAiTargetUrl.value.trim() : '', promptTemplate: '' });
+      if (ok) {
+        if (askAiPromptTemplate) askAiPromptTemplate.value = '';
+        this.showNotification('Prompt template reset to default', 'success');
+      }
     });
 
     // VirusTotal API key input
