@@ -29,6 +29,152 @@ const MD5 = {
   }
 };
 
+// ==================== Ask AI: free helpers ====================
+// Source of truth: tests/verify_features.js keeps byte-for-byte copies of these
+// for plain-Node testing (popup.js is not a module — no build step in scope).
+// buildDefaultIocTable + the default-template branch of buildTriagePrompt are
+// lifted verbatim from the original askClaude() body (popup.js pre-refactor).
+
+// Builds the IOC section using the same labels/links the original askClaude()
+// used. Takes a grouped object { ip: [..], domain: [..], ... } and returns a
+// markdown string of sections joined by blank lines.
+function buildDefaultIocTable(grouped) {
+  const labelMap = {
+    ip: 'IP Addresses', domain: 'Domains', url: 'URLs', hostname: 'Hostnames',
+    hash: 'File Hashes', email: 'Email Addresses', cve: 'CVEs',
+    mitre: 'MITRE Techniques', crypto: 'Crypto Addresses', mac: 'MAC Addresses'
+  };
+  const vtIp    = v => `[VirusTotal](https://www.virustotal.com/gui/ip-address/${encodeURIComponent(v)}) · [AbuseIPDB](https://www.abuseipdb.com/check/${encodeURIComponent(v)})`;
+  const vtDom   = v => `[VirusTotal](https://www.virustotal.com/gui/domain/${encodeURIComponent(v)})`;
+  const vtUrl   = v => `[VirusTotal](https://www.virustotal.com/gui/url/${btoa(v)})`;
+  const vtHash  = v => `[VirusTotal](https://www.virustotal.com/gui/file/${v})`;
+  const noLinks = () => '—';
+  const cveLinks    = v => `[NVD](https://nvd.nist.gov/vuln/detail/${v}) · [MITRE CVE](https://cve.mitre.org/cgi-bin/cvename.cgi?name=${v})`;
+  const mitreLinks  = v => `[ATT&CK](https://attack.mitre.org/techniques/${v.replace('.', '/')})`;
+  const linkMap = {
+    ip: vtIp, domain: vtDom, url: vtUrl, hostname: noLinks, hash: vtHash,
+    email: noLinks, cve: cveLinks, mitre: mitreLinks, crypto: noLinks, mac: noLinks
+  };
+  const sections = [];
+  for (const key of Object.keys(labelMap)) {
+    const values = grouped[key] || [];
+    if (!values.length) continue;
+    const rows = values.map(v => `| \`${v}\` | ${linkMap[key](v)} |`).join('\n');
+    sections.push(`**${labelMap[key]}**\n| Indicator | Links |\n|-----------|-------|\n${rows}\n`);
+  }
+  return sections.join('\n');
+}
+
+function buildTriagePrompt(iocs, rawInput, template) {
+  const grouped = {};
+  for (const i of iocs) {
+    const key = i.category in { ip:1, domain:1, url:1, hostname:1, hash:1, email:1, cve:1, mitre:1, crypto:1, mac:1 } ? i.category : 'hostname';
+    (grouped[key] = grouped[key] || []).push(i.value);
+  }
+  const table = buildDefaultIocTable(grouped);
+  const fmtIocs = iocs.map(i => `[${i.category}]: ${i.value}`).join('\n');
+  const contextSection = rawInput && rawInput.length < 2000
+    ? `\n\nAlert/Context Text Provided:\n"""\n${rawInput}\n"""`
+    : '';
+
+  if (!template) {
+    return `You are a seasoned SOC analyst tasked with producing a concise, clear, and actionable triage report for a security alert. Use the IOCs and alert context below to complete each section of the report.${contextSection}
+
+Pre-extracted IOCs (use these to populate Section 6):
+${table}
+
+---
+
+Produce a triage report using **exactly** the following structure and markdown formatting:
+
+# Security Alert Triage Report
+
+## 1. Priority and Severity
+State the alert priority (Critical / High / Medium / Low) clearly, with a one-sentence justification.
+
+---
+
+## 2. What Was Observed
+- **Alert Source & Name:**
+- **Affected Host(s) & IP(s):**
+- **Suspicious Activity / Indicators Detected:**
+- **Relevant Time Window:**
+- **Detection Logic Summary:**
+
+---
+
+## 3. What Is the Risk
+- **True Positive or False Positive:**
+- **Potential Impact:**
+- **Attacker Behaviour Context:**
+
+---
+
+## 4. Threat Context
+- **Vulnerability / Malware Details:**
+- **Attacker TTPs (with [MITRE ATT&CK](https://attack.mitre.org) links where applicable):**
+- **Relevant Threat Intelligence:**
+
+---
+
+## 5. What Is Recommended
+- **Immediate Actions:**
+- **Longer-Term Remediation:**
+- **Monitoring / Hunting Follow-Up:**
+
+---
+
+## 6. Extracted IOCs
+Use the pre-extracted IOC tables provided above. Preserve the VirusTotal, AbuseIPDB, NVD, and ATT&CK links. If a section has no indicators, omit it.
+
+---
+
+Formatting rules:
+- Use markdown headings and \`---\` horizontal rules between sections.
+- Use tables with clickable links for IOC listings.
+- Keep language professional, clear, and concise — suitable for both technical teams and management.
+- When referencing CVEs, MITRE techniques, or tools, include official links.
+- Avoid unexplained technical jargon.`;
+  }
+
+  let out = template;
+  if (out.includes('{{iocs}}')) {
+    out = out.split('{{iocs}}').join(fmtIocs);
+  } else {
+    out += '\n\n## Indicators\n\n' + fmtIocs;
+  }
+  if (out.includes('{{rawInput}}')) {
+    out = out.split('{{rawInput}}').join(rawInput || '');
+  } else {
+    if (rawInput) out += '\n\n## Raw input\n\n' + rawInput;
+  }
+  return out;
+}
+
+const askAiPresets = [
+  { label: 'Claude',         url: 'https://claude.ai/new' },
+  { label: 'ChatGPT',        url: 'https://chatgpt.com/' },
+  { label: 'Gemini',         url: 'https://gemini.google.com/app' },
+  { label: 'Copilot',        url: 'https://copilot.microsoft.com/' },
+  { label: 'Perplexity',     url: 'https://www.perplexity.ai/' },
+  { label: 'Mistral (Le Chat)', url: 'https://chat.mistral.ai/chat' }
+];
+
+const askAiDefaultConfig = () => ({ targetUrl: 'https://claude.ai/new', promptTemplate: '' });
+
+function resolveAskAiPreset(url) {
+  const match = askAiPresets.find(p => p.url === url);
+  return match ? match.label : 'Custom…';
+}
+
+function validateAskAiTargetUrl(url) {
+  if (!url || typeof url !== 'string') return { ok: false, error: 'Target URL required' };
+  let u;
+  try { u = new URL(url); } catch { return { ok: false, error: 'Invalid URL' }; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return { ok: false, error: 'URL must be http(s)' };
+  return { ok: true };
+}
+
 class SOCToolkit {
   constructor() {
     this.currentTab = 'ioc';
@@ -874,111 +1020,10 @@ class SOCToolkit {
       this.showNotification('No IOCs to analyze — run analysis first', 'error');
       return;
     }
-
-    // Group IOCs by category for the report's IOC table section
-    const grouped = { ip: [], domain: [], url: [], hostname: [], hash: [], email: [], cve: [], mitre: [], crypto: [], mac: [] };
-    for (const ioc of iocs) {
-      const key = ioc.category in grouped ? ioc.category : 'hostname';
-      grouped[key].push(ioc.value);
-    }
-
-    const buildIocTable = (label, values, linkFn) => {
-      if (!values.length) return '';
-      const rows = values.map(v => {
-        const links = linkFn(v);
-        return `| \`${v}\` | ${links} |`;
-      }).join('\n');
-      return `**${label}**\n| Indicator | Links |\n|-----------|-------|\n${rows}\n`;
-    };
-
-    const vtIp    = v => `[VirusTotal](https://www.virustotal.com/gui/ip-address/${encodeURIComponent(v)}) · [AbuseIPDB](https://www.abuseipdb.com/check/${encodeURIComponent(v)})`;
-    const vtDom   = v => `[VirusTotal](https://www.virustotal.com/gui/domain/${encodeURIComponent(v)})`;
-    const vtUrl   = v => `[VirusTotal](https://www.virustotal.com/gui/url/${btoa(v)})`;
-    const vtHash  = v => `[VirusTotal](https://www.virustotal.com/gui/file/${v})`;
-    const noLinks = () => '—';
-
-    const iocSection = [
-      buildIocTable('IP Addresses', grouped.ip, vtIp),
-      buildIocTable('Domains', grouped.domain, vtDom),
-      buildIocTable('URLs', grouped.url, vtUrl),
-      buildIocTable('Hostnames', grouped.hostname, noLinks),
-      buildIocTable('File Hashes', grouped.hash, vtHash),
-      buildIocTable('Email Addresses', grouped.email, noLinks),
-      buildIocTable('CVEs', grouped.cve, v => `[NVD](https://nvd.nist.gov/vuln/detail/${v}) · [MITRE CVE](https://cve.mitre.org/cgi-bin/cvename.cgi?name=${v})`),
-      buildIocTable('MITRE Techniques', grouped.mitre, v => `[ATT&CK](https://attack.mitre.org/techniques/${v.replace('.', '/')})`),
-      buildIocTable('Crypto Addresses', grouped.crypto, noLinks),
-      buildIocTable('MAC Addresses', grouped.mac, noLinks),
-    ].filter(Boolean).join('\n');
-
-    const rawInput = this.lastIOCInput || '';
-    const contextSection = rawInput && rawInput.length < 2000
-      ? `\n\nAlert/Context Text Provided:\n"""\n${rawInput}\n"""`
-      : '';
-
-    const prompt = `You are a seasoned SOC analyst tasked with producing a concise, clear, and actionable triage report for a security alert. Use the IOCs and alert context below to complete each section of the report.${contextSection}
-
-Pre-extracted IOCs (use these to populate Section 6):
-${iocSection}
-
----
-
-Produce a triage report using **exactly** the following structure and markdown formatting:
-
-# Security Alert Triage Report
-
-## 1. Priority and Severity
-State the alert priority (Critical / High / Medium / Low) clearly, with a one-sentence justification.
-
----
-
-## 2. What Was Observed
-- **Alert Source & Name:**
-- **Affected Host(s) & IP(s):**
-- **Suspicious Activity / Indicators Detected:**
-- **Relevant Time Window:**
-- **Detection Logic Summary:**
-
----
-
-## 3. What Is the Risk
-- **True Positive or False Positive:**
-- **Potential Impact:**
-- **Attacker Behaviour Context:**
-
----
-
-## 4. Threat Context
-- **Vulnerability / Malware Details:**
-- **Attacker TTPs (with [MITRE ATT&CK](https://attack.mitre.org) links where applicable):**
-- **Relevant Threat Intelligence:**
-
----
-
-## 5. What Is Recommended
-- **Immediate Actions:**
-- **Longer-Term Remediation:**
-- **Monitoring / Hunting Follow-Up:**
-
----
-
-## 6. Extracted IOCs
-Use the pre-extracted IOC tables provided above. Preserve the VirusTotal, AbuseIPDB, NVD, and ATT&CK links. If a section has no indicators, omit it.
-
----
-
-Formatting rules:
-- Use markdown headings and \`---\` horizontal rules between sections.
-- Use tables with clickable links for IOC listings.
-- Keep language professional, clear, and concise — suitable for both technical teams and management.
-- When referencing CVEs, MITRE techniques, or tools, include official links.
-- Avoid unexplained technical jargon.`;
-
-    navigator.clipboard.writeText(prompt).then(() => {
-      chrome.tabs.create({ url: 'https://claude.ai/new' });
-      this.showNotification('Prompt copied — paste it into Claude to begin analysis', 'success');
-    }).catch(() => {
-      this.showNotification('Could not copy prompt to clipboard', 'error');
-    });
+    const prompt = buildTriagePrompt(iocs, this.lastIOCInput || '', '');
+    this.copyToClipboard(prompt);
+    this.showNotification('Prompt copied to clipboard', 'success');
+    chrome.tabs.create({ url: 'https://claude.ai/new' });
   }
 
   // Quick copy methods for specific IOC types
