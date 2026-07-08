@@ -837,6 +837,25 @@
     }
     .copy-md-btn i { font-size: 10px; pointer-events: none; }
 
+    .defang-item-btn, .refang-item-btn {
+      background: var(--bg-accent-dark);
+      border: none;
+      color: var(--text-secondary);
+      padding: 2px 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+    }
+    .defang-item-btn:hover, .refang-item-btn:hover {
+      background: var(--button-hover-dark);
+      color: var(--button-active);
+    }
+    .defang-item-btn i, .refang-item-btn i { pointer-events: none; }
+
     /* Dropdown Styles */
     .dropdown {
       position: relative;
@@ -2495,6 +2514,44 @@
         </div>
       </div>
     </details>
+
+    <div class="settings-section" id="askAiSettingsSection">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Ask AI
+      </div>
+      <div class="settings-section-body">
+        <p class="settings-hint">Ask AI copies a triage prompt to your clipboard and opens your chosen AI chat.</p>
+
+        <div class="settings-row-inline">
+          <label class="settings-label" for="askAiPreset">Target chat</label>
+          <select id="askAiPreset" class="settings-select">
+            <option value="Claude">Claude</option>
+            <option value="ChatGPT">ChatGPT</option>
+            <option value="Gemini">Gemini</option>
+            <option value="Copilot">Copilot</option>
+            <option value="Perplexity">Perplexity</option>
+            <option value="Mistral (Le Chat)">Mistral (Le Chat)</option>
+            <option value="Custom…">Custom…</option>
+          </select>
+        </div>
+
+        <div class="settings-row-inline" style="flex-direction:column; align-items:stretch; gap:4px;">
+          <label class="settings-label-block" for="askAiTargetUrl">Chat URL</label>
+          <input id="askAiTargetUrl" type="url" class="settings-input settings-input-mono" placeholder="https://example.com/chat" />
+        </div>
+
+        <div class="settings-row-inline" style="flex-direction:column; align-items:stretch; gap:4px;">
+          <label class="settings-label-block" for="askAiPromptTemplate">Prompt template <span class="settings-hint">(optional)</span></label>
+          <textarea id="askAiPromptTemplate" class="ioc-input" style="min-height:70px; font-size:12px;" placeholder="Add instructions appended after the IOC table (e.g. tone, format, depth). Leave blank for the default triage prompt."></textarea>
+        </div>
+
+        <div class="settings-row-inline">
+          <button id="askAiResetBtn" class="btn btn-secondary btn-small">
+            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reset to default
+          </button>
+        </div>
+      </div>
+    </div>
 
   </div>
 

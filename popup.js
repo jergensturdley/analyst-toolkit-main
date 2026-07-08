@@ -229,7 +229,8 @@ class SOCToolkit {
     await Promise.all([
       this.loadSettings(),
       this.loadSnippets(),
-      this.loadCustomOsintSources()
+      this.loadCustomOsintSources(),
+      this.loadAskAiConfig().then(cfg => this.applyAskAiConfigToUI(cfg))
     ]);
 
     this.displaySnippets();
@@ -553,6 +554,45 @@ class SOCToolkit {
       const url = e.target.value.trim() || 'https://gchq.github.io/CyberChef';
       chrome.storage.local.set({ cyberchefUrl: url });
       this.showNotification('CyberChef URL saved', 'success');
+    });
+
+    // Ask AI settings: preset dropdown, URL, prompt template, reset
+    const askAiPreset = el('askAiPreset');
+    const askAiTargetUrl = el('askAiTargetUrl');
+    const askAiPromptTemplate = el('askAiPromptTemplate');
+    const askAiResetBtn = el('askAiResetBtn');
+    askAiPreset?.addEventListener('change', async (e) => {
+      const v = e.target.value;
+      if (v === 'Custom…') {
+        if (askAiTargetUrl) askAiTargetUrl.focus();
+        return;
+      }
+      const match = askAiPresets.find(p => p.label === v);
+      if (match && askAiTargetUrl) {
+        askAiTargetUrl.value = match.url;
+        await this.saveAskAiConfig({ targetUrl: match.url, promptTemplate: askAiPromptTemplate ? askAiPromptTemplate.value : '' });
+        this.showNotification('Ask AI target saved', 'success');
+      }
+    });
+    askAiTargetUrl?.addEventListener('change', async (e) => {
+      const targetUrl = e.target.value.trim();
+      const ok = await this.saveAskAiConfig({ targetUrl, promptTemplate: askAiPromptTemplate ? askAiPromptTemplate.value : '' });
+      if (!ok) {
+        const cfg = await this.loadAskAiConfig();
+        e.target.value = cfg.targetUrl; // restore on rejection
+      } else {
+        this.showNotification('Ask AI target saved', 'success');
+        if (askAiPreset) askAiPreset.value = resolveAskAiPreset(targetUrl);
+      }
+    });
+    askAiPromptTemplate?.addEventListener('change', async (e) => {
+      await this.saveAskAiConfig({ targetUrl: askAiTargetUrl ? askAiTargetUrl.value.trim() : '', promptTemplate: e.target.value });
+      this.showNotification('Ask AI prompt template saved', 'success');
+    });
+    askAiResetBtn?.addEventListener('click', async () => {
+      if (askAiPromptTemplate) askAiPromptTemplate.value = '';
+      await this.saveAskAiConfig({ targetUrl: askAiTargetUrl ? askAiTargetUrl.value.trim() : '', promptTemplate: '' });
+      this.showNotification('Prompt template reset to default', 'success');
     });
 
     // VirusTotal API key input
@@ -1014,16 +1054,23 @@ class SOCToolkit {
     this.copyToClipboard(values.join('\n'));
   }
 
-  askAi() {
+  async askAi() {
     const iocs = this.lastIOCs;
     if (!iocs || iocs.length === 0) {
       this.showNotification('No IOCs to analyze — run analysis first', 'error');
       return;
     }
-    const prompt = buildTriagePrompt(iocs, this.lastIOCInput || '', '');
+    const cfg = await this.loadAskAiConfig();
+    const v = validateAskAiTargetUrl(cfg.targetUrl);
+    if (!v.ok) {
+      this.showNotification(`Ask AI: ${v.error}`, 'error');
+      this.switchTab('settings');
+      return;
+    }
+    const prompt = buildTriagePrompt(iocs, this.lastIOCInput || '', cfg.promptTemplate);
     this.copyToClipboard(prompt);
     this.showNotification('Prompt copied to clipboard', 'success');
-    chrome.tabs.create({ url: 'https://claude.ai/new' });
+    chrome.tabs.create({ url: cfg.targetUrl });
   }
 
   // Quick copy methods for specific IOC types
@@ -1414,6 +1461,15 @@ class SOCToolkit {
   // --- Rest of your original class methods (snippets, copyToClipboard, etc.) ---
 
   // === Settings ===
+  applyAskAiConfigToUI(cfg) {
+    const urlInput = document.getElementById('askAiTargetUrl');
+    const tplArea = document.getElementById('askAiPromptTemplate');
+    const presetSel = document.getElementById('askAiPreset');
+    if (urlInput) urlInput.value = cfg.targetUrl;
+    if (tplArea) tplArea.value = cfg.promptTemplate;
+    if (presetSel) presetSel.value = resolveAskAiPreset(cfg.targetUrl);
+  }
+
   async loadSettings() {
     return new Promise((resolve) => {
       try {
@@ -1548,35 +1604,36 @@ class SOCToolkit {
   }
 
   // --- Ask AI config ---
-  defaultAskAiConfig() {
-    return {
-      provider: 'anthropic',
-      anthropic:  { apiKey: '', model: 'claude-opus-4-8', baseUrl: 'https://api.anthropic.com' },
-      openai:     { apiKey: '', model: 'gpt-4o',          baseUrl: 'https://api.openai.com/v1' },
-      systemPrompt: ''
-    };
+  async loadAskAiConfig() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(['askAiConfig'], (res) => {
+          const cfg = res && res.askAiConfig;
+          if (!cfg || typeof cfg !== 'object') return resolve(askAiDefaultConfig());
+          resolve({
+            targetUrl: typeof cfg.targetUrl === 'string' ? cfg.targetUrl : askAiDefaultConfig().targetUrl,
+            promptTemplate: typeof cfg.promptTemplate === 'string' ? cfg.promptTemplate : ''
+          });
+        });
+      } catch (e) {
+        resolve(askAiDefaultConfig());
+      }
+    });
   }
 
-  validateAskAiConfig(cfg) {
-    if (!cfg || typeof cfg !== 'object') return { ok: false, error: 'Missing config' };
-    const provider = cfg.provider;
-    if (provider !== 'anthropic' && provider !== 'openai') {
-      return { ok: false, error: 'Invalid provider' };
+  async saveAskAiConfig(cfg) {
+    const v = validateAskAiTargetUrl(cfg && cfg.targetUrl);
+    if (!v.ok) {
+      this.showNotification(`Ask AI: ${v.error}`, 'error');
+      return false;
     }
-    const block = cfg[provider];
-    if (!block || typeof block !== 'object') return { ok: false, error: 'Missing provider block' };
-    const key = (block.apiKey || '').trim();
-    const model = (block.model || '').trim();
-    if (!key) return { ok: false, error: 'API key required' };
-    if (!model) return { ok: false, error: 'Model required' };
-    if (block.baseUrl) {
-      let u;
-      try { u = new URL(block.baseUrl); } catch { return { ok: false, error: 'Invalid baseUrl' }; }
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-        return { ok: false, error: 'baseUrl must be http(s)' };
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ askAiConfig: cfg }, () => resolve(true));
+      } catch (e) {
+        resolve(false);
       }
-    }
-    return { ok: true };
+    });
   }
 
   // === Theme Management ===
