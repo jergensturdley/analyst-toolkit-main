@@ -12,7 +12,7 @@ Settings, snippets, IOC history, and enrichment-agent results are stored locally
 
 ## Network usage
 
-Outbound HTTP requests only occur when you click an OSINT lookup link, run an enrichment agent, or invoke the Ask AI flow. Requests go to the providers configured in Settings (default: VirusTotal, ipinfo.io, AbuseIPDB, GreyNoise, plus the user-configured Ask AI target URL). The extension never makes network requests without a user action.
+Outbound HTTP requests only occur when you click an OSINT lookup link or run an enrichment agent. Requests go to the providers configured in Settings (default: VirusTotal, ipinfo.io, AbuseIPDB, GreyNoise). Ask AI is a clipboard-copy helper: it builds a triage prompt and copies it to your clipboard so you can paste it into the AI chat of your choice; the extension itself does not contact any AI provider. The extension never makes network requests without a user action.
 
 ## Third-party access
 
