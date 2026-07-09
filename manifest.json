@@ -9,24 +9,37 @@
     "clipboardWrite",
     "contextMenus",
     "notifications",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
 
   "host_permissions": [
-    "<all_urls>"
+    "https://www.virustotal.com/*",
+    "https://www.abuseipdb.com/*",
+    "https://api.abuseipdb.com/*",
+    "https://ipinfo.io/*",
+    "https://api.greynoise.io/*",
+    "https://viz.greynoise.com/*",
+    "https://urlscan.io/*",
+    "https://urlhaus-api.abuse.ch/*",
+    "https://urlhaus.abuse.ch/*",
+    "https://mb-api.abuse.ch/*",
+    "https://bazaar.abuse.ch/*",
+    "https://otx.alienvault.com/*",
+    "https://gchq.github.io/*",
+    "https://cyberchef.org/*",
+    "https://macvendors.com/*",
+    "https://www.macvendorlookup.com/*",
+    "https://www.blockchain.com/*",
+    "https://etherscan.io/*",
+    "https://attack.mitre.org/*",
+    "https://crt.sh/*",
+    "https://checkurl.phishtank.com/*"
   ],
 
   "background": {
     "service_worker": "background.js"
   },
-
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_end"
-    }
-  ],
 
   "action": {
     "default_popup": "popup.html",
@@ -54,7 +67,7 @@
       },
       "description": "Open SOC Analyst Toolkit"
     },
-    
+
     "toggle-snippets": {
       "suggested_key": {
         "default": "Ctrl+Shift+T",

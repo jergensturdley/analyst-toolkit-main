@@ -1,6 +1,10 @@
 // SOC Analyst Toolkit - Popup JavaScript
 "use strict";
 
+// Note: HTML escaping is provided by SOCToolkit#escapeHtml (popup.js:2010).
+// Call sites in this file use `this.escapeHtml(...)` so the class method is
+// resolved; do not introduce a top-level `escapeHtml` that would shadow it.
+
 // Helper function for UTF-8 to Base64 encoding
 function utf8ToBase64(text) {
   const utf8Bytes = new TextEncoder().encode(text);

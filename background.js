@@ -2174,14 +2174,20 @@ function addToInvestigationNotes(text) {
   });
 }
 
-function copyToClipboard(text) {
+async function copyToClipboard(text) {
   // Store in background for content script to copy
   chrome.storage.local.set({ clipboardText: text });
-  
-  // Try to copy via content script in active tab
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]) {
-      chrome.tabs.sendMessage(tabs[0].id, { action: 'copyToClipboard', text });
+
+  // Try to copy via content script in active tab (inject on demand)
+  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+    if (!tabs || !tabs[0]) return;
+    const tabId = tabs[0].id;
+    try {
+      if (tabs[0].url && /^chrome:|^about:|^edge:/.test(tabs[0].url)) return;
+      await ensureContentScript(tabId);
+      chrome.tabs.sendMessage(tabId, { action: 'copyToClipboard', text });
+    } catch (err) {
+      console.warn('copyToClipboard tab message failed:', err && err.message ? err.message : err);
     }
   });
 }
@@ -2372,20 +2378,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+// Inject content.js into a tab on demand (used by snippet overlay + selected-text features)
+async function ensureContentScript(tabId) {
+  if (!tabId) return false;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content.js']
+    });
+    return true;
+  } catch (err) {
+    console.warn('SOC Toolkit: content script injection failed:', err && err.message ? err.message : err);
+    return false;
+  }
+}
+
 // Command handler
 chrome.commands.onCommand.addListener((command) => {
   if (command === '_execute_action') {
     // Handle keyboard shortcut
     chrome.action.openPopup();
   } else if (command === 'toggle-snippets') {
-    // Toggle snippet expansion in active tab
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: 'toggleSnippets' }, (response) => {
+    // Toggle snippet expansion in active tab (inject content.js first; do not auto-inject on every page)
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs || !tabs[0]) return;
+      const tabId = tabs[0].id;
+      try {
+        if (tabs[0].url && /^chrome:|^about:|^edge:/.test(tabs[0].url)) return; // can't inject into chrome:// pages
+        await ensureContentScript(tabId);
+        chrome.tabs.sendMessage(tabId, { action: 'toggleSnippets' }, (response) => {
           if (chrome.runtime.lastError) {
             console.error('Snippet toggle failed:', chrome.runtime.lastError.message);
           }
         });
+      } catch (err) {
+        console.error('toggle-snippets failed:', err);
       }
     });
   }
