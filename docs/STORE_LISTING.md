@@ -59,7 +59,10 @@ Triage security indicators of compromise. The extension extracts IOCs from selec
 - **`contextMenus`** — Adds the right-click "Analyze with SOC Toolkit" item and the OSINT-lookup submenu.
 - **`notifications`** — Surfaces background-task results (e.g. enrichment agent completion).
 - **`activeTab`** — Lets the context-menu actions read the current tab's selected text.
-- **`host_permissions: <all_urls>`** — Required because the OSINT links and enrichment agents target user-configurable third-party services (VirusTotal, ipinfo.io, AbuseIPDB, GreyNoise, etc.). Only the user-configured domains are contacted, only when the user clicks.
+- **`scripting`** — Lets the extension inject the IOC-extraction helper into the active tab when the user picks "Analyze with SOC Toolkit" from the right-click menu. Used only on explicit user action, only against the active tab, and only to read selected text — no automatic global content script.
+- **`host_permissions` (21 explicit third-party domains)** — The manifest declares a narrow allowlist of the OSINT and enrichment providers the extension talks to: `virustotal.com`, `abuseipdb.com`, `ipinfo.io`, `greynoise.io`, `urlscan.io`, `urlhaus.abuse.ch`, `bazaar.abuse.ch`, `otx.alienvault.com`, `macvendors.com`, `blockchain.com`, `etherscan.io`, `attack.mitre.org`, `crt.sh`, `phishtank.com`, plus GCHQ CyberChef. This is a principle-of-least-privilege allowlist: the extension cannot reach any domain that is not on the list. Only the user-configured domains on this allowlist are contacted, only when the user clicks.
+
+  Custom OSINT sources you add in Settings (domain-based deep links) are opened by your browser as a normal new tab; they do not require any additional `host_permissions` because the browser, not the extension, navigates to them. Ask AI is clipboard-only — the extension does not contact any AI provider itself.
 
 ## Privacy policy URL
 

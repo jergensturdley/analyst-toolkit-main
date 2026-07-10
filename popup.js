@@ -308,6 +308,7 @@ class SOCToolkit {
   // Helper for batch enrichment with a single tracking notification
   async _batchEnrich(type, values) {
     if (!values.length) return;
+    const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     
     const total = values.length;
     let completed = 0;
@@ -349,15 +350,144 @@ class SOCToolkit {
         } else {
           updateProgress();
         }
+
+
       });
     }
   }
 
+  // === First-use consent gates (privacy disclosure, store-readiness item 7) ===
+  // Both "enrichment" (provider API calls) and "askAi" (clipboard -> third-party
+  // LLM) send user data off-device. We prompt the first time and persist consent
+  // in chrome.storage.local under `socConsent`. Users can revoke from Settings.
+
+  _readConsent() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(['socConsent'], (res) => {
+          const c = res && res.socConsent;
+          if (!c || typeof c !== 'object') return resolve({ enrichment: false, askAi: false });
+          resolve({
+            enrichment: c.enrichment === true,
+            askAi: c.askAi === true
+          });
+        });
+      } catch (e) {
+        resolve({ enrichment: false, askAi: false });
+      }
+    });
+  }
+
+  _writeConsent(partial) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(['socConsent'], (res) => {
+          const cur = (res && typeof res.socConsent === 'object' && res.socConsent) || {};
+          const next = Object.assign({}, cur, partial || {});
+          chrome.storage.local.set({ socConsent: next }, () => resolve(true));
+        });
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  async _ensureConsent(kind) {
+    if (kind !== 'enrichment' && kind !== 'askAi') return true;
+    const cur = await this._readConsent();
+    if (cur[kind]) return true;
+    const ok = await this._showConsentModal(kind);
+    if (ok) await this._writeConsent({ [kind]: true });
+    return ok;
+  }
+
+  _showConsentModal(kind) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('consentModal');
+      const title = document.getElementById('consentModalTitle');
+      const body = document.getElementById('consentModalBody');
+      const allow = document.getElementById('consentAllowBtn');
+      const deny = document.getElementById('consentDenyBtn');
+      const close = document.getElementById('consentCloseBtn');
+      if (!modal || !title || !body || !allow || !deny) { resolve(false); return; }
+      if (kind === 'askAi') {
+        title.textContent = 'Send IOC triage prompt to a third-party AI chat?';
+        body.innerHTML = [
+          '<p>Ask AI will:</p>',
+          '<ol>',
+          '<li>Generate a markdown prompt containing every IOC currently shown (IPs, domains, URLs, hashes, CVEs, MITRE techniques, emails, etc.) plus any alert text you pasted.</li>',
+          '<li>Copy that prompt to your clipboard.</li>',
+          '<li>Open the AI chat target you configured in Settings (Claude, ChatGPT, Gemini, Copilot, Perplexity, Mistral, or any custom HTTPS URL).</li>',
+          '</ol>',
+          '<p>Nothing is sent by the extension itself &mdash; you paste the prompt yourself &mdash; but the IOC content will be visible to the third-party service you have chosen.</p>'
+        ].join('');
+      } else {
+        title.textContent = 'Enrich IOCs using third-party services?';
+        body.innerHTML = [
+          '<p>Enrichment will send the selected IOC to the third-party providers enabled in Settings (e.g. VirusTotal, AbuseIPDB, ipinfo, GreyNoise, urlscan, MalwareBazaar). Each enabled provider returns data that the extension renders into the popup graph.</p>',
+          '<p>No API keys are uploaded &mdash; they are configured locally and used only in your browser to call those services.</p>',
+          '<p>You can disable specific providers in Settings &gt; Enrichment Providers.</p>'
+        ].join('');
+      }
+      const cleanup = (decision) => {
+        try { modal.style.display = 'none'; } catch (e) {}
+        try { allow.removeEventListener('click', allowHandler); } catch (e) {}
+        try { deny.removeEventListener('click', denyHandler); } catch (e) {}
+        try { close && close.removeEventListener('click', denyHandler); } catch (e) {}
+        document.removeEventListener('keydown', keyHandler, true);
+        resolve(decision);
+      };
+      const allowHandler = () => cleanup(true);
+      const denyHandler = () => cleanup(false);
+      const keyHandler = (ev) => {
+        if (ev.key === 'Escape') { ev.preventDefault(); cleanup(false); }
+        else if (ev.key === 'Enter') { ev.preventDefault(); cleanup(true); }
+      };
+      allow.addEventListener('click', allowHandler);
+      deny.addEventListener('click', denyHandler);
+      if (close) close.addEventListener('click', denyHandler);
+      document.addEventListener('keydown', keyHandler, true);
+      modal.style.display = 'flex';
+      try { allow.focus(); } catch (e) {}
+    });
+  }
+
+  resetConsent() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.remove(['socConsent'], () => {
+          if (typeof this._refreshConsentStatus === 'function') this._refreshConsentStatus();
+          this.showNotification('Consent prompts reset', 'success');
+          resolve(true);
+        });
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  _refreshConsentStatus() {
+    return this._readConsent().then((c) => {
+      const enrichEl = document.getElementById('consentStatusEnrichment');
+      const aiEl = document.getElementById('consentStatusAskAi');
+      const fmt = (granted) => granted ? 'granted' : 'not yet granted (will be requested on first use)';
+      if (enrichEl) enrichEl.textContent = fmt(c.enrichment);
+      if (aiEl) aiEl.textContent = fmt(c.askAi);
+    });
+  }
+
   setupEventListeners() {
     // Tab switching
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
+      btn.addEventListener('click', () => {
+        this.switchTab(btn.dataset.tab);
+        if (btn.dataset.tab === 'settings') this._refreshConsentStatus();
+      });
     });
+
+    // Privacy & Consent — reset prompts
+    document.getElementById('resetConsentBtn')?.addEventListener('click', () => this.resetConsent());
 
     // IOC Analysis buttons
     const el = (id) => document.getElementById(id);
@@ -948,14 +1078,14 @@ class SOCToolkit {
       const truncatedValue = this.truncateText(ioc.value, 40);
 
       htmlParts.push(`
-        <div class="ioc-item" data-value="${escapedValue}" data-type="${ioc.category.toLowerCase()}">
+        <div class="ioc-item" data-value="${escapedValue}" data-type="${this.escapeHtml(ioc.category.toLowerCase())}">
           <input type="checkbox" class="ioc-select" />
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
               <div class="ioc-value" data-copy="${escapedValue}" title="Click to copy">
-                ${truncatedValue}
+                ${escapedValue}
               </div>
-              <span class="ioc-type type-${ioc.category.toLowerCase()}">${ioc.type}</span>
+              <span class="ioc-type type-${this.escapeHtml(ioc.category.toLowerCase())}">${this.escapeHtml(ioc.type || '')}</span>
               <div class="ioc-actions" style="margin-left: auto; display: flex; gap: 4px;">
                 <button class="defang-item-btn" title="Defang this IOC"><i class="fa-solid fa-shield-halved"></i></button>
                 <button class="refang-item-btn" title="Refang this IOC"><i class="fa-solid fa-link"></i></button>
@@ -964,7 +1094,7 @@ class SOCToolkit {
             <div class="osint-links">
               ${osintLinks.map(link => `
                 <div class="osint-link-container">
-                  <a href="${link.url}" target="_blank" class="osint-link" title="${link.name}">${link.name}</a>
+                  <a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="osint-link" title="${this.escapeHtml(link.name)}">${this.escapeHtml(link.name)}</a>
                   <button class="copy-link-btn" data-copy="${this.escapeHtml(link.url)}" title="Copy Link"><i class="fa-regular fa-copy"></i></button>
                   <button class="copy-md-btn" title="Copy Markdown"><i class="fa-brands fa-markdown"></i>&nbsp;MD</button>
                 </div>
@@ -1061,6 +1191,7 @@ class SOCToolkit {
   }
 
   async askAi() {
+    const ok = await this._ensureConsent('askAi'); if (!ok) return;
     const iocs = this.lastIOCs;
     if (!iocs || iocs.length === 0) {
       this.showNotification('No IOCs to analyze — run analysis first', 'error');
@@ -3320,7 +3451,8 @@ class SOCToolkit {
     return `Enrichment failed: ${details.join(' | ')}`;
   }
 
-  triggerIpEnrichment(ipValue, nodeId) {
+  async triggerIpEnrichment(ipValue, nodeId) {
+    const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     try {
       this.showNotification('Enriching IP...', 'info');
     } catch (e) {
@@ -3396,7 +3528,8 @@ class SOCToolkit {
     });
   }
 
-  triggerHashEnrichment(hashValue, nodeId) {
+  async triggerHashEnrichment(hashValue, nodeId) {
+    const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     this.showNotification('Enriching hash...', 'info');
     chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'hash', ioc: hashValue }, (res) => {
       if (!res || res.status === 'error') {
@@ -3410,7 +3543,8 @@ class SOCToolkit {
     });
   }
 
-  triggerDomainEnrichment(domainValue, nodeId) {
+  async triggerDomainEnrichment(domainValue, nodeId) {
+    const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     this.showNotification('Enriching domain...', 'info');
     chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'domain', ioc: domainValue }, (res) => {
       if (!res || res.status === 'error') {
@@ -3425,7 +3559,8 @@ class SOCToolkit {
     });
   }
 
-  triggerUrlEnrichment(urlValue, nodeId) {
+  async triggerUrlEnrichment(urlValue, nodeId) {
+    const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     this.showNotification('Enriching URL...', 'info');
     chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'url', ioc: urlValue }, (res) => {
       if (!res || res.status === 'error') {
@@ -3478,28 +3613,51 @@ class SOCToolkit {
         const dataLines = s.data ? Object.entries(s.data)
           .filter(([, v]) => v !== null && v !== undefined && v !== '')
           .slice(0, 6)
-          .map(([k, v]) => `<span><b>${k}:</b> ${typeof v === 'object' ? JSON.stringify(v) : String(v).slice(0, 80)}</span>`)
+          .map(([k, v]) => `<span><b>${this.escapeHtml(k)}:</b> ${typeof v === 'object' ? this.escapeHtml(JSON.stringify(v)) : this.escapeHtml(String(v).slice(0, 80))}</span>`)
           .join('') : '';
-        const apiLink = s.apiUrl ? `<a class="source-link" href="${s.apiUrl}" target="_blank" title="${s.apiUrl}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Source</a>` : '';
+        // Defense-in-depth: only render apiUrl if it is an https:// deep link, so a
+        // future provider cannot accidentally turn the Source button into a
+        // javascript: URL via attribute interpolation.
+        const safeApiUrl = (typeof s.apiUrl === 'string' && s.apiUrl.startsWith('https://'))
+          ? s.apiUrl
+          : '';
+        const apiLink = safeApiUrl
+          ? `<a class="source-link" href="${this.escapeHtml(safeApiUrl)}" target="_blank" rel="noopener noreferrer" title="${this.escapeHtml(safeApiUrl)}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Source</a>`
+          : '';
         const cachedBadge = s.cached ? '<span class="source-cached-badge">cached</span>' : '';
-        const rawId = `raw_${(s.provider || 'src').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}`;
+        const safeProvider = String(s.provider || 'src').replace(/[^a-z0-9]/gi, '_');
+        const rawId = `raw_${safeProvider}_${Date.now()}`;
         const rawJson = JSON.stringify(s.data || {}, null, 2).slice(0, 2000);
         return `
 <div class="enrichment-source-card">
   <div class="source-header">
-    <span class="source-name">${s.displayName || s.provider || 'Unknown'}</span>
-    <span class="source-status ${statusClass}">${statusClass}</span>
+    <span class="source-name">${this.escapeHtml(s.displayName || s.provider || 'Unknown')}</span>
+    <span class="source-status ${this.escapeHtml(statusClass)}">${this.escapeHtml(statusClass)}</span>
   </div>
-  ${s.status === 'error' ? `<div style="color:var(--danger-color);font-size:11px;">${s.errorMessage || 'Unknown error'}</div>` : ''}
+  ${s.status === 'error' ? `<div style="color:var(--danger-color);font-size:11px;">${this.escapeHtml(s.errorMessage || 'Unknown error')}</div>` : ''}
   <div class="source-data">${dataLines || '<span style="color:var(--text-secondary);">No data</span>'}</div>
   <div class="source-meta">
     ${apiLink}
     ${cachedBadge}
-    <button class="enrichment-raw-toggle" onclick="(function(btn){var el=document.getElementById('${rawId}');if(el){el.classList.toggle('open');btn.textContent=el.classList.contains('open')?'Hide JSON':'View JSON';}})(this)">View JSON</button>
+    <button class="enrichment-raw-toggle" data-raw-target="${this.escapeHtml(rawId)}">View JSON</button>
   </div>
-  <pre class="enrichment-raw-json" id="${rawId}">${rawJson.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
+  <pre class="enrichment-raw-json" id="${this.escapeHtml(rawId)}">${this.escapeHtml(rawJson)}</pre>
 </div>`;
       }).join('');
+
+      // Wire up the View JSON toggle buttons via addEventListener instead of
+      // inline onclick attributes — keeps CSP-friendly and removes any XSS risk
+      // from attribute interpolation.
+      sourceCards.querySelectorAll('.enrichment-raw-toggle').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetId = btn.getAttribute('data-raw-target');
+          if (!targetId) return;
+          const el = document.getElementById(targetId);
+          if (!el) return;
+          el.classList.toggle('open');
+          btn.textContent = el.classList.contains('open') ? 'Hide JSON' : 'View JSON';
+        });
+      });
     }
 
     panel.style.display = 'block';

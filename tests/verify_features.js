@@ -918,8 +918,74 @@ test('askAiDefaultConfig: defaults to claude.ai/new, empty template', () => {
 
 console.log(' [PASS] Ask AI config + prompt builder');
 
-// ==================== Test Summary ====================
-console.log('\n========================================');
+// ==================== Privacy & Consent (store-readiness item 7) ====================
+console.log('\n--- Privacy & Consent Tests ---');
+
+const fs = require('fs');
+const path = require('path');
+const popupHtml = fs.readFileSync(path.join(__dirname, '..', 'popup.html'), 'utf8');
+const popupJs = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
+
+test('consent modal markup is present in popup.html', () => {
+  for (const id of ['consentModal', 'consentModalTitle', 'consentModalBody', 'consentAllowBtn', 'consentDenyBtn', 'consentCloseBtn']) {
+    assert.ok(popupHtml.includes('id="' + id + '"'), 'popup.html missing #' + id);
+  }
+});
+
+test('consent status + reset UI is present in Settings', () => {
+  for (const id of ['privacyConsentSection', 'consentStatusEnrichment', 'consentStatusAskAi', 'resetConsentBtn']) {
+    assert.ok(popupHtml.includes('id="' + id + '"'), 'popup.html missing #' + id);
+  }
+});
+
+test('popup.js defines _ensureConsent + resetConsent', () => {
+  assert.ok(/_ensureConsent\s*\(/.test(popupJs), 'popup.js missing _ensureConsent');
+  assert.ok(/resetConsent\s*\(/.test(popupJs), 'popup.js missing resetConsent');
+  assert.ok(/_refreshConsentStatus\s*\(/.test(popupJs), 'popup.js missing _refreshConsentStatus');
+});
+
+test('every enrichment entry point goes through _ensureConsent', () => {
+  // Each enrichment function body must contain the consent gate before the provider call.
+  for (const fn of ['_batchEnrich', 'triggerIpEnrichment', 'triggerHashEnrichment', 'triggerDomainEnrichment', 'triggerUrlEnrichment']) {
+    // Find the function *definition* (not the call site): match `fn(` followed by
+    // a parameter list and a brace. Using the async keyword when present.
+    const defRe = new RegExp('(?:async\\s+)?' + fn + '\\s*\\([^)]*\\)\\s*\\{');
+    const m = defRe.exec(popupJs);
+    assert.ok(m, fn + ' definition is missing from popup.js');
+    const idx = m.index;
+    const window = popupJs.slice(idx, idx + 400);
+    assert.ok(window.indexOf("_ensureConsent('enrichment')") >= 0,
+      fn + ' must call _ensureConsent("enrichment")');
+  }
+});
+
+test('askAi goes through _ensureConsent("askAi")', () => {
+  const idx = popupJs.indexOf('async askAi()');
+  assert.ok(idx >= 0, 'askAi() is missing from popup.js');
+  const window = popupJs.slice(idx, idx + 300);
+  assert.ok(window.indexOf("_ensureConsent('askAi')") >= 0,
+    'askAi() must call _ensureConsent("askAi")');
+});
+
+test('consent storage key is socConsent and stays on chrome.storage.local', () => {
+  assert.ok(popupJs.indexOf('socConsent') >= 0, 'popup.js must persist under socConsent');
+  assert.ok(popupJs.indexOf("chrome.storage.local.remove(['socConsent']") >= 0,
+    'consent reset must use chrome.storage.local (not sync)');
+});
+
+test('reset button is wired to resetConsent()', () => {
+  assert.ok(popupJs.indexOf("resetConsentBtn')") >= 0
+        || popupJs.indexOf('resetConsentBtn")') >= 0,
+    'resetConsentBtn lookup missing');
+  // Quick smoke: the listener must invoke this.resetConsent().
+  assert.ok(popupJs.indexOf("this.resetConsent()") >= 0,
+    'this.resetConsent() is not invoked from any handler');
+});
+
+
+console.log(' [PASS] Privacy & consent UI + entry-point gates');
+
+
 console.log('Test Summary:');
 console.log('  Passed:', passed);
 console.log('  Failed:', failed);
