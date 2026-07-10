@@ -333,6 +333,7 @@ class SOCToolkit {
       await new Promise(resolve => setTimeout(resolve, i === 0 ? 0 : delay));
       
       chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: type, ioc: val }, (res) => {
+        void chrome.runtime.lastError;
         completed++;
         if (!res || res.status === 'error') {
           failed++;
@@ -857,6 +858,7 @@ class SOCToolkit {
       const lastResult = panel?._lastResult;
       if (!lastResult?.ioc || !lastResult?.iocType) return;
       chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: lastResult.iocType, ioc: lastResult.ioc }, (res) => {
+        void chrome.runtime.lastError;
         if (!res || res.status === 'error') {
           this.showNotification(this.buildEnrichmentErrorMessage(res), 'error');
           return;
@@ -930,6 +932,7 @@ class SOCToolkit {
       if (!container) return;
       container.innerHTML = '<div style="color:var(--text-secondary);font-size:11px;">Loading...</div>';
       chrome.runtime.sendMessage({ action: 'getRateLimitStatus' }, (res) => {
+        void chrome.runtime.lastError;
         if (!res?.status) {
           container.innerHTML = '<div style="color:var(--danger-color);font-size:11px;">Failed to load rate limit data.</div>';
           return;
@@ -3158,6 +3161,7 @@ class SOCToolkit {
             const domainValue = (node.title && node.title.includes(':')) ? node.title.split(':').slice(1).join(':').trim() : node.label;
             // Ask background to enrich passive DNS (VirusTotal fallback)
             chrome.runtime.sendMessage({ action: 'passiveDnsEnrich', domain: domainValue }, (response) => {
+              void chrome.runtime.lastError;
               if (!response) return;
               if (response.fallback === 'web') {
                 this.showNotification('Passive DNS', 'Opened VirusTotal web UI for manual lookup');
@@ -3275,6 +3279,7 @@ class SOCToolkit {
             if (it.id === 'pdns') {
               const domainValue = (node.title && node.title.includes(':')) ? node.title.split(':').slice(1).join(':').trim() : node.label;
               chrome.runtime.sendMessage({ action: 'passiveDnsEnrich', domain: domainValue }, (response) => {
+                void chrome.runtime.lastError;
                 if (!response) return;
                 if (response.fallback === 'web') {
                   this.showNotification('Passive DNS', 'Opened VirusTotal web UI for manual lookup');
@@ -3311,6 +3316,7 @@ class SOCToolkit {
             } else if (it.id === 'asn') {
               const ipValue = this.getNodeValue(node);
               chrome.runtime.sendMessage({ action: 'asnEnrich', ip: ipValue }, (resp) => {
+                void chrome.runtime.lastError;
                 if (!resp) return;
                 if (resp.fallback === 'web') {
                   this.showNotification('ASN', 'Opened ipinfo web UI for manual lookup');
@@ -3460,6 +3466,7 @@ class SOCToolkit {
       console.error('Failed to show "Enriching IP..." notification', e);
     }
     chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'ip', ioc: ipValue }, (res) => {
+      void chrome.runtime.lastError;
       if (!res || res.status === 'error') {
         const message = this.buildEnrichmentErrorMessage(res);
         this.showNotification(message, 'error');
@@ -3532,6 +3539,7 @@ class SOCToolkit {
     const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     this.showNotification('Enriching hash...', 'info');
     chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'hash', ioc: hashValue }, (res) => {
+      void chrome.runtime.lastError;
       if (!res || res.status === 'error') {
         this.showNotification(this.buildEnrichmentErrorMessage(res), 'error');
         return;
@@ -3547,6 +3555,7 @@ class SOCToolkit {
     const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     this.showNotification('Enriching domain...', 'info');
     chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'domain', ioc: domainValue }, (res) => {
+      void chrome.runtime.lastError;
       if (!res || res.status === 'error') {
         this.showNotification(this.buildEnrichmentErrorMessage(res), 'error');
         return;
@@ -3563,6 +3572,7 @@ class SOCToolkit {
     const ok = await this._ensureConsent('enrichment'); if (!ok) return;
     this.showNotification('Enriching URL...', 'info');
     chrome.runtime.sendMessage({ action: 'agentEnrich', iocType: 'url', ioc: urlValue }, (res) => {
+      void chrome.runtime.lastError;
       if (!res || res.status === 'error') {
         this.showNotification(this.buildEnrichmentErrorMessage(res), 'error');
         return;
