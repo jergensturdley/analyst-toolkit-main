@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SOC Analyst Toolkit — a Manifest V3 Chrome extension (v0.4) for SOC analysts. Extracts IOCs from selected text, generates OSINT lookup links, manages snippets, opens selected text in CyberChef. All processing is local; only user-initiated lookups hit the network.
+SOC Analyst Toolkit — a Manifest V3 Chrome extension (v0.5) for SOC analysts. Extracts IOCs from selected text, generates OSINT lookup links, manages snippets, opens selected text in CyberChef. All processing is local; only user-initiated lookups hit the network.
 
-There is no build step and no `package.json`. Source is plain JS/CSS served as extension assets.
+There is no build/bundle step. A `package.json` exists but only to pull in Playwright for the store-screenshot script under `scripts/`; the extension source itself is plain JS/CSS served as-is.
 
 ## Commands
 
@@ -28,7 +28,7 @@ No linter, formatter, or bundler is configured. Tests live only in `tests/verify
 | `manifest.json` | MV3 manifest: permissions, commands, content/background/popup wiring |
 | `popup.html` / `popup.js` | The toolbar popup UI. The `SOCToolkit` class (popup.js:32) owns state, IOC parsing, OSINT link generation, graph rendering, snippets, settings, Ask-AI panel |
 | `background.js` | MV3 service worker. Owns cross-origin fetch (popup can't fetch directly), `RateLimiter` (background.js:51), cache I/O, the central `chrome.runtime.onMessage` router (background.js:2199), context menus, notifications |
-| `content.js` | Injected into every page at `document_end`. Handles `getSelectedText`, `highlightIOCs`, page-snippet UI. Listens via its own `chrome.runtime.onMessage` (content.js:16) |
+| `content.js` | Injected **on demand** via `chrome.scripting.executeScript` (`ensureContentScript` in background.js) — there is no `content_scripts` block in the manifest, so it is not auto-injected into every page. Handles `copyToClipboard`, `toggleSnippets`, `highlightIOCs`, `getSelectedText`, page-snippet UI. Listens via its own `chrome.runtime.onMessage` (content.js:16) |
 | `tlds.js` | TLD allow-list used for domain extraction |
 | `vis-network.min.js` | Vendored graph viz library (the popup's IOC graph) |
 | `css/`, `icons/`, `webfonts/` | Static assets for the popup UI |
@@ -66,7 +66,7 @@ Three execution contexts, connected by `chrome.runtime` messages. Each context o
 ## IOC processing flow
 
 1. User selects text on a page, right-clicks → context menu → "Analyze SOC Toolkit" (background.js), or `Ctrl+Shift+S` to open the popup directly.
-2. Popup receives selected text via `chrome.tabs.sendMessage` → `getSelectedText` in content.js, or via `getPendingAnalysis` from background.
+2. Popup receives the selected text via `getPendingAnalysis` from background (the context menu stashed it in `pendingAnalysis` / `chrome.storage.local`). content.js still exposes a `getSelectedText` handler, but nothing in popup/background currently calls it.
 3. `SOCToolkit.analyzeIOCs` (popup.js:706) runs the regex bank against the input, dedupes, classifies (IP / domain / URL / hash / email / CVE / MITRE / crypto / MAC), and renders the result list + the vis-network graph.
 4. `generateOSINTLinks` (popup.js:1908) builds per-IOC lookup URLs for ~20 providers; the popup's context menu and `openXxxLookup` family in background.js (`openVirusTotalLookup`, `openAlienVaultLookup`, `openAbuseIPDBLookup`, `openIpInfoLookup`, `openMitreLookup`, `openBlockchainLookup`) open them.
 5. Enrichment agents (per `AGENTS.md`) are invoked via `agentEnrich` → `runAgent` in background, with per-provider caching (`agent_<id>_<type>_<ioc>` keys in `chrome.storage.local`) and `RateLimiter` guarding each provider.
@@ -98,4 +98,4 @@ API keys are user-supplied only; never hardcode one. Background fallbacks: when 
 - Several popup→background `sendMessage` call sites do not check `chrome.runtime.lastError` on the callback. If you add a new call, handle the disconnected-worker case (the `safeResponse` wrapper pattern from the 2026-07-07 plan is the established fix).
 - `popup.html` and `popup.js` are large (~80KB / ~140KB); new features belong in the same files unless they introduce a clear new context.
 - `tlds.js` is consumed by both popup.js and the test mock — keep the allow-list in one place.
-- No npm dependencies; `vis-network.min.js` is vendored locally. Don't add a `package.json` or external CDN reference without a deliberate decision.
+- No runtime npm dependencies; `vis-network.min.js` is vendored locally. The only dev dependency is Playwright (store screenshots). Don't add runtime deps or external CDN references without a deliberate decision.

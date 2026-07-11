@@ -986,6 +986,37 @@ test('reset button is wired to resetConsent()', () => {
 console.log(' [PASS] Privacy & consent UI + entry-point gates');
 
 
+// ==================== CSV export cell escaping ====================
+console.log('\n--- CSV Export Escaping Tests ---');
+
+// Byte-for-byte copy of toCsvCell from popup.js — keep in sync.
+function toCsvCell(value) {
+  let v = String(value == null ? '' : value);
+  if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+  return '"' + v.replace(/"/g, '""') + '"';
+}
+
+test('toCsvCell wraps plain values in quotes', () => {
+  assert.strictEqual(toCsvCell('1.2.3.4'), '"1.2.3.4"');
+});
+test('toCsvCell doubles embedded quotes', () => {
+  assert.strictEqual(toCsvCell('a"b'), '"a""b"');
+});
+test('toCsvCell neutralizes = formula injection', () => {
+  assert.strictEqual(toCsvCell('=1+2'), '"\'=1+2"');
+});
+test('toCsvCell neutralizes @ and + and - leads', () => {
+  assert.strictEqual(toCsvCell('@cmd'), '"\'@cmd"');
+  assert.strictEqual(toCsvCell('+ping'), '"\'+ping"');
+  assert.strictEqual(toCsvCell('-2+3'), '"\'-2+3"');
+});
+test('toCsvCell handles null/undefined', () => {
+  assert.strictEqual(toCsvCell(null), '""');
+  assert.strictEqual(toCsvCell(undefined), '""');
+});
+console.log(' [PASS] CSV export cell escaping');
+
+
 console.log('Test Summary:');
 console.log('  Passed:', passed);
 console.log('  Failed:', failed);

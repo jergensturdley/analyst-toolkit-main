@@ -105,8 +105,12 @@ async function fetchWithBackoff(url, options = {}, maxRetries = 3) {
       const resp = await fetch(url, options);
       if (resp.ok) return resp;
       if (resp.status === 429) {
+        // Retry-After may be a number of seconds OR an HTTP-date. Number(date) is
+        // NaN, which would make setTimeout fire immediately and hammer the server,
+        // so fall back to exponential backoff when it isn't a finite number.
         const retryAfter = resp.headers.get('Retry-After');
-        const delay = retryAfter ? Number(retryAfter) * 1000 : Math.min(1000 * 2 ** attempt, 30000);
+        const seconds = retryAfter ? Number(retryAfter) : NaN;
+        const delay = Number.isFinite(seconds) ? seconds * 1000 : Math.min(1000 * 2 ** attempt, 30000);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
@@ -1957,7 +1961,8 @@ function openMitreLookup(text) {
   // Extract MITRE technique ID if present (format: T1234 or T1234.567)
   const mitreMatch = cleanText.match(/T\d{4}(?:\.\d{3})?/);
   if (mitreMatch) {
-    const url = `https://attack.mitre.org/techniques/${mitreMatch[0]}/`;
+    // Sub-techniques use a path separator: T1055.001 -> T1055/001
+    const url = `https://attack.mitre.org/techniques/${mitreMatch[0].replace('.', '/')}/`;
     chrome.tabs.create({ url });
   } else {
     showNotification('Invalid MITRE Technique', 'Format should be T1234 or T1234.567');
@@ -1985,13 +1990,17 @@ function openBlockchainLookup(text) {
 }
 
 function defangAndCopy(text) {
+  // Mirror popup.js SOCToolkit#defangText so the output round-trips through the
+  // popup's refang, which expects [.] and [at] and protocol-anchored hxxp/fxp.
+  // The old chain used bare /ftp/g (mangling words like "software") and [@]
+  // (which the popup's refang does not reverse).
   const defanged = text
+    .replace(/https:\/\//gi, 'hxxps://')
+    .replace(/http:\/\//gi, 'hxxp://')
+    .replace(/ftp:\/\//gi, 'fxp://')
     .replace(/\./g, '[.]')
-    .replace(/http/g, 'hxxp')
-    .replace(/https/g, 'hxxps')
-    .replace(/ftp/g, 'fxp')
-    .replace(/@/g, '[@]');
-  
+    .replace(/@/g, '[at]');
+
   // Copy to clipboard and show notification
   copyToClipboard(defanged);
   showNotification('IOCs Defanged', `Defanged IOCs copied to clipboard`);
@@ -2175,8 +2184,9 @@ function addToInvestigationNotes(text) {
 }
 
 async function copyToClipboard(text) {
-  // Store in background for content script to copy
-  chrome.storage.local.set({ clipboardText: text });
+  // Content script copies from the message payload below; the previous
+  // storage.local write of `clipboardText` was never read and only left copied
+  // text (which may include IOCs / page selection) sitting on disk.
 
   // Try to copy via content script in active tab (inject on demand)
   chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -2204,9 +2214,21 @@ function showNotification(title, message) {
 // Message handling
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getPendingAnalysis') {
-    sendResponse({ text: pendingAnalysis || null });
-    pendingAnalysis = null;
-    updateBadge(false);
+    (async () => {
+      // Fall back to the storage copy: the MV3 service worker can be killed
+      // between the context-menu click and the popup opening, which would wipe
+      // the in-memory global. Always clear the storage copy so selected page
+      // text is not left on disk.
+      let text = pendingAnalysis;
+      if (!text) {
+        const stored = await new Promise((r) => chrome.storage.local.get(['pendingAnalysis'], r));
+        text = stored.pendingAnalysis || null;
+      }
+      pendingAnalysis = null;
+      await new Promise((r) => chrome.storage.local.remove(['pendingAnalysis'], r));
+      updateBadge(false);
+      sendResponse({ text: text || null });
+    })();
     return true;
   }
 
@@ -2375,7 +2397,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  return true;
+  // No handler matched: return false so the message channel closes immediately
+  // instead of being held open (which hangs any sender awaiting sendResponse).
+  return false;
 });
 
 // Inject content.js into a tab on demand (used by snippet overlay + selected-text features)
@@ -2499,27 +2523,29 @@ async function handleFloatingWindow(sendResponse) {
     floatingWindowState.isOpen = true;
     await saveFloatingWindowState();
 
-    // Listen for window close events
-    const onRemovedListener = (windowId) => {
-      if (windowId === floatingWindow.id) {
-        floatingWindow = null;
-        floatingWindowState.isOpen = false;
-        saveFloatingWindowState();
-        chrome.windows.onRemoved.removeListener(onRemovedListener);
-      }
+    // Listen for window position/size changes. Guard on floatingWindow: once the
+    // window closes this listener must not dereference a null floatingWindow.id.
+    const onBoundsChangedListener = (win) => {
+      if (!floatingWindow || win.id !== floatingWindow.id) return;
+      floatingWindowState.width = win.width;
+      floatingWindowState.height = win.height;
+      floatingWindowState.left = win.left;
+      floatingWindowState.top = win.top;
+      saveFloatingWindowState();
     };
-    chrome.windows.onRemoved.addListener(onRemovedListener);
 
-    // Listen for window position/size changes
-    const onBoundsChangedListener = (window) => {
-      if (window.id === floatingWindow.id) {
-        floatingWindowState.width = window.width;
-        floatingWindowState.height = window.height;
-        floatingWindowState.left = window.left;
-        floatingWindowState.top = window.top;
-        saveFloatingWindowState();
-      }
+    // Listen for window close events, and tear down BOTH listeners on close so
+    // onBoundsChanged doesn't keep firing (and throwing) for every other window.
+    const onRemovedListener = (windowId) => {
+      if (!floatingWindow || windowId !== floatingWindow.id) return;
+      floatingWindow = null;
+      floatingWindowState.isOpen = false;
+      saveFloatingWindowState();
+      chrome.windows.onRemoved.removeListener(onRemovedListener);
+      chrome.windows.onBoundsChanged.removeListener(onBoundsChangedListener);
     };
+
+    chrome.windows.onRemoved.addListener(onRemovedListener);
     chrome.windows.onBoundsChanged.addListener(onBoundsChangedListener);
 
     sendResponse({ success: true, windowId: window.id, action: 'opened' });

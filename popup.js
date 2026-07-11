@@ -15,6 +15,16 @@ function utf8ToBase64(text) {
   return btoa(binary);
 }
 
+// Encode one CSV field. IOC values are attacker-controlled, so this both quotes
+// correctly (double embedded quotes, wrap the field) and neutralizes spreadsheet
+// formula injection by prefixing a leading =,+,-,@,tab or CR with an apostrophe.
+// NOTE: a byte-for-byte copy lives in tests/verify_features.js — keep in sync.
+function toCsvCell(value) {
+  let v = String(value == null ? '' : value);
+  if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+  return '"' + v.replace(/"/g, '""') + '"';
+}
+
 // Lightweight synchronous hash replacement for MD5 (keeps API)
 // Not cryptographic — used as a deterministic identifier within the popup.
 const MD5 = {
@@ -50,7 +60,7 @@ function buildDefaultIocTable(grouped) {
   };
   const vtIp    = v => `[VirusTotal](https://www.virustotal.com/gui/ip-address/${encodeURIComponent(v)}) · [AbuseIPDB](https://www.abuseipdb.com/check/${encodeURIComponent(v)})`;
   const vtDom   = v => `[VirusTotal](https://www.virustotal.com/gui/domain/${encodeURIComponent(v)})`;
-  const vtUrl   = v => `[VirusTotal](https://www.virustotal.com/gui/url/${btoa(v)})`;
+  const vtUrl   = v => `[VirusTotal](https://www.virustotal.com/gui/url/${utf8ToBase64(v).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')})`;
   const vtHash  = v => `[VirusTotal](https://www.virustotal.com/gui/file/${v})`;
   const noLinks = () => '—';
   const cveLinks    = v => `[NVD](https://nvd.nist.gov/vuln/detail/${v}) · [MITRE CVE](https://cve.mitre.org/cgi-bin/cvename.cgi?name=${v})`;
@@ -441,8 +451,10 @@ class SOCToolkit {
       const allowHandler = () => cleanup(true);
       const denyHandler = () => cleanup(false);
       const keyHandler = (ev) => {
-        if (ev.key === 'Escape') { ev.preventDefault(); cleanup(false); }
-        else if (ev.key === 'Enter') { ev.preventDefault(); cleanup(true); }
+        // stopPropagation so the global Escape handler (which clears IOC input)
+        // does not also fire when the user dismisses this modal with Escape.
+        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); cleanup(false); }
+        else if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); cleanup(true); }
       };
       allow.addEventListener('click', allowHandler);
       deny.addEventListener('click', denyHandler);
@@ -549,8 +561,10 @@ class SOCToolkit {
     // Snippet functionality
     el('snippetSearch')?.addEventListener('input', (e) => this.searchSnippets(e.target.value));
     el('addSnippetBtn')?.addEventListener('click', () => this.addSnippet());
-    el('importBtn')?.addEventListener('click', () => this.importSnippets());
-    el('exportBtn')?.addEventListener('click', () => this.exportSnippets());
+    // Note: importBtn/exportBtn are wired by the preset controls in the
+    // DOMContentLoaded block (exportSnippetsPreset/importSnippetsPreset), which
+    // support format + merge options. Do not add duplicate listeners here or the
+    // buttons fire twice (double download / double file picker).
 
     // Investigation Notes functionality
     el('addNoteBtn')?.addEventListener('click', () => this.showAddNoteModal());
@@ -1078,7 +1092,6 @@ class SOCToolkit {
     for (const ioc of iocs) {
       const osintLinks = this.generateOSINTLinks(ioc.value, ioc.category);
       const escapedValue = this.escapeHtml(ioc.value);
-      const truncatedValue = this.truncateText(ioc.value, 40);
 
       htmlParts.push(`
         <div class="ioc-item" data-value="${escapedValue}" data-type="${this.escapeHtml(ioc.category.toLowerCase())}">
@@ -1208,8 +1221,15 @@ class SOCToolkit {
       return;
     }
     const prompt = buildTriagePrompt(iocs, this.lastIOCInput || '', cfg.promptTemplate);
-    this.copyToClipboard(prompt);
-    this.showNotification('Prompt copied to clipboard', 'success');
+    // Await the clipboard write before opening the tab. Opening a new tab blurs
+    // the popup, which then closes and can abort an in-flight clipboard write —
+    // leaving the user on the AI site with nothing to paste.
+    try {
+      await navigator.clipboard.writeText(prompt);
+      this.showNotification('Prompt copied to clipboard', 'success');
+    } catch (e) {
+      this.showNotification('Could not copy prompt — clipboard blocked', 'error');
+    }
     chrome.tabs.create({ url: cfg.targetUrl });
   }
 
@@ -1220,7 +1240,7 @@ class SOCToolkit {
       if (!typeEl) return false;
       const itemType = typeEl.textContent.toLowerCase();
       if (type === 'ip') return itemType === 'ipv4' || itemType === 'ipv6';
-      if (type === 'hash') return itemType === 'md5' || itemType === 'sha1' || itemType === 'sha256';
+      if (type === 'hash') return itemType === 'md5' || itemType === 'sha1' || itemType === 'sha256' || itemType === 'sha512';
       return itemType === type.toLowerCase();
     });
 
@@ -1326,8 +1346,9 @@ class SOCToolkit {
 
   async clearOldData(daysOld = 30) {
     const cutoff = Date.now() - (daysOld * 24 * 60 * 60 * 1000);
-    const notes = await this.loadNotes();
 
+    // 1. Prune timestamped investigation notes
+    const notes = await this.loadNotes();
     const filteredNotes = notes.filter(note => {
       const match = note.match(/^\[([^\]]+)\]/);
       if (match) {
@@ -1340,12 +1361,24 @@ class SOCToolkit {
       }
       return true;
     });
-
-    const removed = notes.length - filteredNotes.length;
+    const removedNotes = notes.length - filteredNotes.length;
     await this.saveNotes(filteredNotes);
-    await this.updateStorageIndicator();
 
-    this.showNotification(`Cleared ${removed} old notes`, 'success');
+    // 2. Prune stale caches. The button says "clear all data older than N days",
+    // so also sweep enrichment (agent_*), passive-DNS (pdns_cache_*) and ASN
+    // (asn_cache_*) entries — each stores a numeric .timestamp.
+    const all = await new Promise(resolve => chrome.storage.local.get(null, resolve));
+    const staleKeys = Object.keys(all || {}).filter(k => {
+      if (!/^(agent_|pdns_cache_|asn_cache_)/.test(k)) return false;
+      const ts = all[k] && all[k].timestamp;
+      return typeof ts === 'number' && ts < cutoff;
+    });
+    if (staleKeys.length) {
+      await new Promise(resolve => chrome.storage.local.remove(staleKeys, resolve));
+    }
+
+    await this.updateStorageIndicator();
+    this.showNotification(`Cleared ${removedNotes} old notes, ${staleKeys.length} cache entries`, 'success');
   }
 
   exportIOCs(format = 'csv') {
@@ -1371,7 +1404,7 @@ class SOCToolkit {
     let ext = 'txt';
 
     if (format === 'csv') {
-      content = 'Value,Type\n' + iocs.map(i => `"${i.value}","${i.type}"`).join('\n');
+      content = 'Value,Type\n' + iocs.map(i => `${toCsvCell(i.value)},${toCsvCell(i.type)}`).join('\n');
       mime = 'text/csv';
       ext = 'csv';
     } else if (format === 'json') {
@@ -1549,8 +1582,11 @@ class SOCToolkit {
     const items = document.querySelectorAll('.ioc-item');
     let visibleCount = 0;
     items.forEach(item => {
-      const type = item.querySelector('.ioc-type')?.textContent.toLowerCase() || '';
-      if (category === 'all' || type.includes(category)) {
+      // Filter on the item's category (data-type), not the type-label text.
+      // Labels are md5/sha1/ipv4/… so text matching never matched "hash" and
+      // was fragile for "ip".
+      const type = item.dataset.type || '';
+      if (category === 'all' || type === category) {
         item.style.display = '';
         visibleCount++;
       } else {
@@ -1964,44 +2000,6 @@ class SOCToolkit {
     this.showNotification('Snippet saved', 'success');
   }
 
-  importSnippets() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const text = await file.text();
-      try {
-        const parsed = JSON.parse(text);
-        const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.snippets) ? parsed.snippets : []);
-        if (!arr.length) throw new Error('No snippets found');
-        // Basic normalization
-        const cleaned = arr.map(s => ({ name: s.name || 'Untitled', content: s.content || '' }));
-        this.snippets = cleaned;
-        await this.saveSnippets();
-        this.displaySnippets();
-        this.showNotification(`Imported ${cleaned.length} snippets`, 'success');
-      } catch (e) {
-        this.showNotification('Failed to import snippets', 'error');
-      }
-    };
-    input.click();
-  }
-
-  exportSnippets() {
-    const data = JSON.stringify(this.snippets, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `snippets-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    this.showNotification('Snippets exported', 'success');
-  }
-
-
   // === IOC helpers ===
   setupResultEventListeners() {
     document.querySelectorAll('.ioc-value').forEach(el => {
@@ -2155,7 +2153,9 @@ class SOCToolkit {
     }
 
     const enc = encodeURIComponent(value);
-    const b64 = encodeURIComponent(btoa(value));
+    // utf8ToBase64 (not raw btoa) so non-Latin1 IOCs (IDN domains, unicode URLs)
+    // don't throw and abort the whole result render.
+    const b64 = encodeURIComponent(utf8ToBase64(value));
     const links = [];
 
     // Default OSINT Sources
@@ -2208,7 +2208,8 @@ class SOCToolkit {
 
     // MITRE ATT&CK Technique lookups
     if (category === 'mitre') {
-      links.push({ name: 'MITRE ATT&CK', url: `https://attack.mitre.org/techniques/${enc}/` });
+      // Sub-techniques live at /techniques/T1055/001/, not /techniques/T1055.001/
+      links.push({ name: 'MITRE ATT&CK', url: `https://attack.mitre.org/techniques/${enc.replace('.', '/')}/` });
       links.push({ name: 'D3FEND', url: `https://d3fend.mitre.org/offensive-technique/attack/${enc}/` });
     }
 
@@ -2267,14 +2268,14 @@ class SOCToolkit {
     const valueEl = itemEl.querySelector('.ioc-value');
     if (!valueEl) return;
 
-    const escapedNewValue = this.escapeHtml(newValue);
-    const truncatedNewValue = this.truncateText(newValue, 40);
-
-    valueEl.setAttribute('data-copy', escapedNewValue);
-    valueEl.textContent = truncatedNewValue;
+    // Store the RAW value. setAttribute and textContent do not HTML-parse their
+    // input, so escaping here would corrupt copies (a URL "&" would become
+    // "&amp;" on the clipboard) and truncating textContent would corrupt
+    // copy-all / export, which read .ioc-value textContent for the full value.
+    valueEl.setAttribute('data-copy', newValue);
+    valueEl.textContent = newValue;
     valueEl.title = 'Click to copy';
-    
-    // Also update data-value on the item if present
+
     itemEl.setAttribute('data-value', newValue);
   }
 
@@ -2370,130 +2371,6 @@ class SOCToolkit {
     // Also handle generic [.]
     t = t.replace(/\[\.\]/g, '.');
     return t;
-  }
-
-  // Try to expand a snippet trigger at the current caret position inside a textarea/input
-  tryExpandSnippetAtCaret(inputEl) {
-    if (!inputEl) return false;
-    const pos = (typeof inputEl.selectionStart === 'number') ? inputEl.selectionStart : 0;
-    const value = inputEl.value || '';
-    // Find the token left of the caret up to 50 chars back or until whitespace
-    const start = Math.max(0, pos - 50);
-    const left = value.slice(start, pos);
-    // Token defined as last non-whitespace run
-    const m = left.match(/(\S+)$/);
-    if (!m) return false;
-    const token = m[1];
-    if (!token) return false;
-    // Look for a snippet whose trigger exactly matches token (case-insensitive)
-    const snip = (this.snippets || []).find(s => (s.trigger || '').toLowerCase() === token.toLowerCase());
-    if (!snip) return false;
-    // Replace the token with the snippet content
-    const before = value.slice(0, start + left.lastIndexOf(token));
-    const after = value.slice(pos);
-    const insert = snip.content || '';
-    inputEl.value = before + insert + after;
-    // Place caret after inserted content
-    const newPos = (before + insert).length;
-    inputEl.selectionStart = inputEl.selectionEnd = newPos;
-    // If autoAnalyze is enabled, analyze the new content
-    if (this.autoAnalyze) {
-      this.analyzeIOCs();
-    }
-    this.showNotification('Snippet expanded', 'success');
-    return true;
-  }
-
-  // Update snippet suggestions dropdown based on current caret token
-  updateSnippetSuggestions(inputEl) {
-    const ss = document.getElementById('snippetSuggestions');
-    if (!ss) return;
-    const pos = inputEl.selectionStart || 0;
-    const value = inputEl.value || '';
-    const start = Math.max(0, pos - 100);
-    const left = value.slice(start, pos);
-    const m = left.match(/(\S+)$/);
-    if (!m) { this.hideSnippetSuggestions(); return; }
-    const token = m[1];
-    if (!token) { this.hideSnippetSuggestions(); return; }
-    // Mandatory prefixes from settings (normalize)
-    const prefixes = (this.snippetPrefixes || ['$']).map(p => (p || '').trim()).filter(Boolean);
-    // normalize token first char
-    if (!prefixes.some(p => token.startsWith(p))) { this.hideSnippetSuggestions(); return; }
-    const q = token.toLowerCase();
-    const matches = (this.snippets || []).filter(s => (s.trigger || '').toLowerCase().startsWith(q));
-    if (!matches.length) { this.hideSnippetSuggestions(); return; }
-    // If exact match (case-insensitive), auto-expand
-    const exact = matches.find(s => (s.trigger || '').toLowerCase() === token.toLowerCase());
-    if (exact) {
-      // Replace immediately
-      const before = value.slice(0, start + left.lastIndexOf(token));
-      const after = value.slice(pos);
-      const insert = exact.content || '';
-      inputEl.value = before + insert + after;
-      const newPos = (before + insert).length;
-      inputEl.selectionStart = inputEl.selectionEnd = newPos;
-      this.hideSnippetSuggestions();
-      if (this.autoAnalyze) this.analyzeIOCs();
-      this.showNotification('Snippet auto-expanded', 'success');
-      return;
-    }
-    this.renderSnippetSuggestions(matches, inputEl, start + left.lastIndexOf(token));
-  }
-
-  // Navigate suggestion list by delta (1 or -1)
-  navigateSuggestions(delta = 1) {
-    const ss = document.getElementById('snippetSuggestions');
-    if (!ss || !ss.classList.contains('active')) return;
-    const items = Array.from(ss.querySelectorAll('.suggestion'));
-    if (!items.length) return;
-    let idx = items.findIndex(i => i.classList.contains('selected'));
-    if (idx === -1) idx = delta > 0 ? -1 : 0;
-    // remove old
-    items.forEach(i => i.classList.remove('selected'));
-    idx = (idx + delta + items.length) % items.length;
-    const el = items[idx];
-    el.classList.add('selected');
-    // ensure visible
-    el.scrollIntoView({ block: 'nearest' });
-  }
-
-  renderSnippetSuggestions(matches, inputEl, tokenStartIndex) {
-    const ss = document.getElementById('snippetSuggestions');
-    if (!ss) return;
-    ss.innerHTML = '';
-    matches.forEach((s) => {
-      const div = document.createElement('div');
-      div.className = 'suggestion';
-      div.textContent = `${s.trigger} — ${s.name}`;
-      div.addEventListener('click', () => {
-        const value = inputEl.value || '';
-        const before = value.slice(0, tokenStartIndex);
-        const after = value.slice(inputEl.selectionStart || 0);
-        const insert = s.content || '';
-        inputEl.value = before + insert + after;
-        const newPos = (before + insert).length;
-        inputEl.selectionStart = inputEl.selectionEnd = newPos;
-        this.hideSnippetSuggestions();
-        if (this.autoAnalyze) this.analyzeIOCs();
-        this.showNotification('Snippet inserted', 'success');
-        inputEl.focus();
-      });
-      ss.appendChild(div);
-    });
-    // Position suggestions under the textarea (simple placement)
-    const rect = inputEl.getBoundingClientRect();
-    ss.style.top = (rect.bottom + window.scrollY) + 'px';
-    ss.style.left = (rect.left + window.scrollX) + 'px';
-    ss.style.width = Math.min(420, rect.width) + 'px';
-    ss.classList.add('active');
-  }
-
-  hideSnippetSuggestions() {
-    const ss = document.getElementById('snippetSuggestions');
-    if (!ss) return;
-    ss.classList.remove('active');
-    ss.innerHTML = '';
   }
 
   extractIOCs(text) {
@@ -2916,30 +2793,42 @@ class SOCToolkit {
       <div class="osint-source-item" draggable="true" data-osint-index="${index}">
         <div class="osint-source-header">
           <div class="osint-source-name">${this.escapeHtml(source.name)}</div>
-          <div class="osint-source-type">${source.types}</div>
+          <div class="osint-source-type">${this.escapeHtml(source.types)}</div>
         </div>
         <div class="osint-source-url">${this.escapeHtml(source.url)}</div>
         <div class="osint-source-actions">
-          <button class="btn btn-secondary btn-small" onclick="toolkit.editCustomOsintSource(${index})">
-            <i class="fa-solid fa-edit"></i> Edit
-          </button>
-          <button class="btn btn-secondary btn-small" onclick="toolkit.moveCustomOsintSource(${index}, -1)">
-            <i class="fa-solid fa-arrow-up"></i> Up
-          </button>
-          <button class="btn btn-secondary btn-small" onclick="toolkit.moveCustomOsintSource(${index}, 1)">
-            <i class="fa-solid fa-arrow-down"></i> Down
-          </button>
-          <button class="btn btn-secondary btn-small" onclick="toolkit.makeCustomDefault(${index})">
-            <i class="fa-solid fa-star"></i> Make default
-          </button>
-          <button class="btn btn-secondary btn-small" onclick="toolkit.deleteCustomOsintSource(${index})">
-            <i class="fa-solid fa-trash"></i> Delete
-          </button>
+          <button class="btn btn-secondary btn-small" data-osint-action="edit"><i class="fa-solid fa-edit"></i> Edit</button>
+          <button class="btn btn-secondary btn-small" data-osint-action="up"><i class="fa-solid fa-arrow-up"></i> Up</button>
+          <button class="btn btn-secondary btn-small" data-osint-action="down"><i class="fa-solid fa-arrow-down"></i> Down</button>
+          <button class="btn btn-secondary btn-small" data-osint-action="default"><i class="fa-solid fa-star"></i> Make default</button>
+          <button class="btn btn-secondary btn-small" data-osint-action="delete"><i class="fa-solid fa-trash"></i> Delete</button>
         </div>
       </div>
     `).join('');
 
     container.innerHTML = html;
+
+    // Event delegation — MV3 extension-page CSP blocks inline onclick handlers.
+    if (this._osintListClickHandler) {
+      container.removeEventListener('click', this._osintListClickHandler);
+    }
+    this._osintListClickHandler = (e) => {
+      const btn = e.target.closest('[data-osint-action]');
+      if (!btn) return;
+      const item = btn.closest('.osint-source-item');
+      if (!item) return;
+      const index = parseInt(item.dataset.osintIndex, 10);
+      if (!Number.isFinite(index)) return;
+      switch (btn.dataset.osintAction) {
+        case 'edit': this.editCustomOsintSource(index); break;
+        case 'up': this.moveCustomOsintSource(index, -1); break;
+        case 'down': this.moveCustomOsintSource(index, 1); break;
+        case 'default': this.makeCustomDefault(index); break;
+        case 'delete': this.deleteCustomOsintSource(index); break;
+      }
+    };
+    container.addEventListener('click', this._osintListClickHandler);
+
     // Also refresh bulk preference options to include current custom sources
     this.updateBulkPreferenceOptions();
 
@@ -3042,6 +2931,13 @@ class SOCToolkit {
 
     if (!url.includes('{{IOC}}')) {
       this.showNotification('URL must contain {{IOC}} placeholder', 'error');
+      return;
+    }
+
+    // Only http(s) schemes — block javascript:/data: and other unexpected schemes
+    // from being stored and later turned into a clickable link.
+    if (!/^https?:\/\//i.test(url)) {
+      this.showNotification('URL must start with http:// or https://', 'error');
       return;
     }
 
@@ -3774,12 +3670,24 @@ class SOCToolkit {
               ${escapedContent}
             </div>
           </div>
-          <button onclick="toolkit.deleteNote(${index})" style="background: var(--danger-color); color: white; border: none; border-radius: 3px; padding: 2px 6px; font-size: 10px; cursor: pointer;">
+          <button class="note-delete-btn" data-note-index="${index}" style="background: var(--danger-color); color: white; border: none; border-radius: 3px; padding: 2px 6px; font-size: 10px; cursor: pointer;">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
       </div>`;
     }).join('');
+
+    // Event delegation — MV3 extension-page CSP blocks inline onclick handlers.
+    if (this._notesListClickHandler) {
+      notesList.removeEventListener('click', this._notesListClickHandler);
+    }
+    this._notesListClickHandler = (e) => {
+      const btn = e.target.closest('.note-delete-btn');
+      if (!btn) return;
+      const index = parseInt(btn.dataset.noteIndex, 10);
+      if (Number.isFinite(index)) this.deleteNote(index);
+    };
+    notesList.addEventListener('click', this._notesListClickHandler);
   }
 
   showAddNoteModal() {
@@ -3906,16 +3814,17 @@ class SOCToolkit {
     try {
       const arrayBuffer = await this.selectedFile.arrayBuffer();
 
-      // Calculate hashes
-      const [md5Hash, sha1Hash, sha256Hash] = await Promise.all([
-        this.calculateHash(arrayBuffer, 'MD5'),
+      // Calculate hashes. MD5 is intentionally omitted: the Web Crypto API does
+      // not implement it, and the popup's FNV-1a `MD5` helper is a 32-bit
+      // identifier — not a real MD5 — so surfacing it as a file MD5 would emit a
+      // bogus IOC.
+      const [sha1Hash, sha256Hash] = await Promise.all([
         this.calculateHash(arrayBuffer, 'SHA-1'),
         this.calculateHash(arrayBuffer, 'SHA-256')
       ]);
 
       const results = `File: ${this.selectedFile.name}
 Size: ${this.formatFileSize(this.selectedFile.size)}
-MD5:    ${md5Hash}
 SHA1:   ${sha1Hash}
 SHA256: ${sha256Hash}
 Type:   ${this.selectedFile.type || 'Unknown'}`;
@@ -3937,11 +3846,6 @@ Type:   ${this.selectedFile.type || 'Unknown'}`;
 
   async calculateHash(arrayBuffer, algorithm) {
     try {
-      // For MD5, we'll use a simple implementation since Web Crypto API doesn't support it
-      if (algorithm === 'MD5') {
-        return await this.calculateMD5(arrayBuffer);
-      }
-
       const hashBuffer = await crypto.subtle.digest(algorithm, arrayBuffer);
       return this.bufferToHex(hashBuffer);
     } catch (error) {
@@ -3958,17 +3862,6 @@ Type:   ${this.selectedFile.type || 'Unknown'}`;
       hexParts.push(bytes[i].toString(16).padStart(2, '0'));
     }
     return hexParts.join('');
-  }
-
-  async calculateMD5(arrayBuffer) {
-    // Use proper MD5 implementation
-    try {
-      const uint8Array = new Uint8Array(arrayBuffer);
-      return MD5.hashArray(uint8Array);
-    } catch (error) {
-      console.error('MD5 calculation failed:', error);
-      return 'MD5 calculation failed';
-    }
   }
 
   copyFileHashes() {

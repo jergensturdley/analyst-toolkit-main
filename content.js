@@ -442,11 +442,6 @@
 
 
 
-
-  function highlightIOCsOnPage(iocs) {
-    showPageNotification(`🔍 IOC highlighting: ${iocs.length} indicators`, 'info');
-  }
-
   function loadSnippets(callback) {
     try {
       chrome.storage.local.get(["snippets"], (result) => {
