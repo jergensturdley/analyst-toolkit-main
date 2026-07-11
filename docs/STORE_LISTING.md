@@ -1,75 +1,164 @@
-# SOC Analyst Toolkit — Chrome Web Store Listing
+# Chrome Web Store Listing — SOC Analyst Toolkit
 
-Copy each section below into the matching field in the Chrome Web Store developer dashboard.
+## Store Metadata
 
-## Title
+**Title:** SOC Analyst Toolkit
 
-SOC Analyst Toolkit
+**Short description** (≤ 132 chars):
+Extract, defang, and pivot on IOCs in seconds. Built for SOC analysts.
 
-## Short description (≤ 132 chars)
+**Category:** Productivity
 
-Extract IOCs from selected text, run OSINT lookups across 20+ threat-intel platforms, manage snippets, and triage with AI.
+---
 
-## Detailed description
+## Detailed Description
 
-SOC Analyst Toolkit is a free, open-source browser extension for SOC analysts and cybersecurity professionals. It extracts indicators of compromise (IOCs) from selected text, generates deep links to 20+ threat-intel platforms for one-click lookup, manages a personal snippet library, and offers an optional Ask AI panel that builds a triage prompt for the user's chosen AI chat.
+SOC Analyst Toolkit is a free, privacy-first browser extension for security operations center (SOC) analysts and cybersecurity professionals. It streamlines the investigation of security alerts by extracting, transforming, and enriching indicators of compromise (IOCs) directly in your browser — no data leaves your machine until you choose to look it up.
 
-100% free, no in-app purchases, no subscriptions, no ads, no premium tier. MIT-licensed open source.
+### Key Features
 
-### IOC Detection & Analysis
-- IPv4 / IPv6, domains, URLs, email addresses, file hashes (MD5 / SHA1 / SHA256 / SHA512), CVEs, MITRE ATT&CK technique IDs, cryptocurrency addresses (Bitcoin / Ethereum), MAC addresses
-- Defang / refang, batch dedupe, per-type statistics
+**IOC Extraction**
+- Automatically detects 9 IOC types from any selected text: IPv4, IPv6, domains, URLs, email addresses, file hashes (MD5, SHA1, SHA256, SHA512), CVE identifiers, MITRE ATT&CK technique IDs, and cryptocurrency addresses.
+- Real-time statistics dashboard with per-type counts.
+- Deduplication and sorting with one click.
 
-### OSINT Integration
-Quick lookup against 20+ providers including VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, GreyNoise, Shodan, URLhaus, urlscan.io, MalwareBazaar, Hybrid Analysis, MITRE ATT&CK, D3FEND, blockchain explorers, MAC vendor databases. Configurable IP enrichment with caching and rate limits. Custom OSINT sources supported.
+**OSINT Integration**
+- One-click lookup links to 20+ threat intelligence platforms: VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, GreyNoise, Shodan, URLhaus, urlscan.io, NVD, MITRE ATT&CK, and more.
+- Group IOCs by type and open all lookups in a single tab group.
+- Custom OSINT entries in Settings — add your internal threat intel sources.
 
-### Productivity
-- Personal searchable snippet library with prefix triggers
-- Timestamped investigation notes
-- Text processing: Base64, hex, ROT13, URL decode, entropy, hash generation
-- CyberChef integration (including custom / self-hosted instances)
-- Export IOCs as CSV / JSON / Markdown / Obsidian-compatible
-- 7 themes (Arc / Coffee / Monokai / Oceanic / Solarized / Earth / Midnight)
+**Defanging & Refanging**
+- Defang IOCs for safe sharing (hxxp://, [.] , [@] , etc.).
+- Refang with a single click for use in tools.
+- Copy individual or all IOCs as defanged text.
 
-### Ask AI
-Replaces the older "Ask Claude" clipboard shortcut with a configurable helper. Pick a target AI chat from a preset dropdown (Claude / ChatGPT / Gemini / Copilot / Perplexity / Mistral / Custom…) and customize the prompt template via Settings. All processing is local; the extension never makes network calls without a user action.
+**AI-Assisted Triage**
+- Build structured triage prompts for any AI chat tool.
+- Choose from presets (Claude, ChatGPT, Gemini) or use a custom URL.
+- Copy prompt to clipboard and paste into your AI of choice.
+- No data sent to AI providers — you control where the prompt goes.
 
-### Privacy
-- All data stored locally in your browser
-- No analytics, no telemetry, no fingerprinting
-- Network requests only when you initiate an OSINT lookup
-- Open source: review the code on GitHub
+**Text Utilities**
+- Hash text with MD5, SHA1, SHA256, or SHA-512.
+- Base64 encode/decode, URL encode/decode.
+- CyberChef integration for 100+ operations.
+- Sort and deduplicate lines.
 
-## Category
+**Privacy-First**
+- All data stored locally in your browser (`chrome.storage.local`).
+- No telemetry, analytics, or third-party SDKs.
+- No data sent without a deliberate user action.
+- Consent modal and reset option included.
 
-Productivity
+---
 
-## Language
+## Single-Purpose Justification
 
-English
+This extension performs one purpose: it extracts, transforms, and links IOCs for security analysis. All features serve this purpose. No unrelated functionality is bundled.
 
-## Single-purpose justification
+---
 
-Triage security indicators of compromise. The extension extracts IOCs from selected text, generates deep links to 20+ OSINT providers for one-click lookup, manages analyst snippets, and offers an optional Ask AI panel that builds a triage prompt for the user's chosen AI chat. All processing is local; the only outbound network calls are user-initiated.
+## Permission Justifications
 
-## Permission justifications
+| Permission | Justification |
+|---|---|
+| `activeTab` | Required to read selected text from the current tab when you click the extension. No other tab access. |
+| `storage` | Stores your settings, saved notes, IOC history, and enrichment-agent results locally in the browser. Never transmitted anywhere. |
+| `clipboardRead` | Used only when you click the Paste button to populate IOC input from your clipboard. Not read in the background. |
+| `clipboardWrite` | Used only when you click Copy to place defanged IOCs or triage prompts on your clipboard. |
+| `notifications` | Shows a brief success confirmation after copying to clipboard. No push notifications. |
+| Host permissions for OSINT domains | Opens OSINT lookup links in new tabs when you click them. Each domain is listed explicitly (e.g., `*://*.virustotal.com/*`). No `<all_urls>` permission. Custom user-added URLs open as normal browser tabs. |
 
-- **`storage`** — Stores user settings (theme, snippets, custom OSINT sources, Ask AI config, enrichment cache) in `chrome.storage.local`. No sync, no remote.
-- **`clipboardWrite`** — Copies IOCs and AI triage prompts to the clipboard at user request.
-- **`contextMenus`** — Adds the right-click "Analyze with SOC Toolkit" item and the OSINT-lookup submenu.
-- **`notifications`** — Surfaces background-task results (e.g. enrichment agent completion).
-- **`activeTab`** — Lets the context-menu actions read the current tab's selected text.
-- **`scripting`** — Lets the extension inject the IOC-extraction helper into the active tab when the user picks "Analyze with SOC Toolkit" from the right-click menu. Used only on explicit user action, only against the active tab, and only to read selected text — no automatic global content script.
-- **`host_permissions` (21 explicit third-party domains)** — The manifest declares a narrow allowlist of the OSINT and enrichment providers the extension talks to: `virustotal.com`, `abuseipdb.com`, `ipinfo.io`, `greynoise.io`, `urlscan.io`, `urlhaus.abuse.ch`, `bazaar.abuse.ch`, `otx.alienvault.com`, `macvendors.com`, `blockchain.com`, `etherscan.io`, `attack.mitre.org`, `crt.sh`, `phishtank.com`, plus GCHQ CyberChef. This is a principle-of-least-privilege allowlist: the extension cannot reach any domain that is not on the list. Only the user-configured domains on this allowlist are contacted, only when the user clicks.
+---
 
-  Custom OSINT sources you add in Settings (domain-based deep links) are opened by your browser as a normal new tab; they do not require any additional `host_permissions` because the browser, not the extension, navigates to them. Ask AI is clipboard-only — the extension does not contact any AI provider itself.
+## Privacy Policy
 
-## Privacy policy URL
+Privacy policy URL: [https://github.com/jergensturdley/analyst-toolkit-main/blob/main/docs/PRIVACY.md](https://github.com/jergensturdley/analyst-toolkit-main/blob/main/docs/PRIVACY.md)
 
-`https://raw.githubusercontent.com/<your-org>/<your-repo>/main/docs/PRIVACY.md`
+Key points covered:
+- Extension is 100% free, no in-app purchases or subscriptions.
+- All data stored locally in `chrome.storage.local`.
+- No analytics, telemetry, or third-party data sharing.
+- Network requests only on explicit user action (clicking a lookup link or running an enrichment agent).
+- Extension author has no access to user data.
 
-(Replace `<your-org>` and `<your-repo>` with the actual GitHub repo path.)
+---
 
-## Single-purpose disclosure
+## Screenshots
 
-The extension contains no analytics SDK, no remote code load, no auto-update mechanism, no fingerprinting. All code is the files in this repository.
+Recommended dimensions: 1280×800 PNG. Extension popup renders at ~400px wide.
+
+**Suggested screenshots:**
+1. Main IOC extraction view — text selected, IOCs extracted and categorized
+2. OSINT lookup panel — one-click links to VirusTotal, AbuseIPDB, GreyNoise
+3. Defang/copy panel — defanged IOCs ready to share
+4. AI triage prompt builder — prompt composed and copied
+5. Settings — custom OSINT entries and preferences
+
+---
+
+## Assets to Upload
+
+| Asset | Dimensions | Format |
+|---|---|---|
+| Small promo tile | 440×280 | PNG |
+| Marquee | 1400×560 | PNG or SVG |
+| Screenshots | 1280×800 | PNG (×5) |
+| Icon | 128×128 | PNG |
+
+---
+
+---
+
+## Privacy Tab — Ready-to-Paste Justifications
+
+Copy each field below into the corresponding box on the **Privacy practices** tab of the Developer Dashboard.
+
+---
+
+### Single Purpose Description (required)
+
+This extension performs one purpose: it extracts, transforms, and links indicators of compromise (IOCs) for security analysis. All features — IOC parsing, OSINT lookup links, defanging, AI triage prompt building, and text utilities — serve this single purpose. No unrelated functionality is bundled.
+
+---
+
+### Permission Justifications
+
+**activeTab**
+Required to read the text you have selected in the current browser tab when you click the extension icon. The extension reads no other tab content and makes no requests without a deliberate user action.
+
+**clipboardRead (Paste button)**
+Used only when you click the optional Paste button in the IOC input area, to place your clipboard contents into the extension for processing. The extension does not read the clipboard in the background or at any other time.
+
+**clipboardWrite (Copy operations)**
+Used only when you click Copy to place defanged IOCs, triage prompts, or exported data onto your clipboard for use in other tools. No data is written to the clipboard without a deliberate user action.
+
+**contextMenus**
+Adds right-click context menu entries ("Lookup in VirusTotal", "Lookup in AbuseIPDB", etc.) for fast OSINT pivoting. The menu items appear only when you right-click while the extension is active.
+
+**Host Permission (OSINT lookups)**
+Opens OSINT lookup links in new tabs when you click them. Each domain is listed explicitly: `https://www.virustotal.com/*`, `https://www.abuseipdb.com/*`, `https://ipinfo.io/*`, `https://api.greynoise.io/*`, `https://urlscan.io/*`, `https://urlhaus.abuse.ch/*`, `https://otx.alienvault.com/*`, `https://attack.mitre.org/*`, `https://nvd.nist.gov/*`, `https://cve.mitre.org/*`, `https://cyberchef.org/*`, and similar. No `<all_urls>` permission is used. Custom user-added URLs open as normal browser tabs with no special permission.
+
+**notifications**
+Displays a brief in-browser success confirmation when IOC data is copied to your clipboard. No push notifications, no background alerts.
+
+**scripting**
+Injects a minimal content script into the active tab to capture selected text when you invoke the extension, enabling IOC extraction from any webpage you are analyzing.
+
+**storage**
+Stores your settings, saved notes, IOC history, and enrichment-agent results locally in the browser using `chrome.storage.local`. This data never leaves your device and is never transmitted to the extension author or any third party.
+
+---
+
+### Remote Code
+
+This extension does not load or execute any remote code. All logic runs locally from the installed extension files. No CDNs, no external scripts, no eval.
+
+---
+
+## Version History
+
+| Version | Date | Notes |
+|---|---|---|
+| 0.5.0 | 2026-07-10 | IOC table refactor, shared prompt module, privacy docs, consent UI |
+| 0.4.x | [prior] | Prior stable release |

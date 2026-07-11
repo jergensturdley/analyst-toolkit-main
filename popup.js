@@ -1220,7 +1220,7 @@ class SOCToolkit {
       this.switchTab('settings');
       return;
     }
-    const prompt = buildTriagePrompt(iocs, this.lastIOCInput || '', cfg.promptTemplate);
+    const prompt = TriagePrompt.buildTriagePrompt(iocs, this.lastIOCInput || '', cfg.promptTemplate);
     // Await the clipboard write before opening the tab. Opening a new tab blurs
     // the popup, which then closes and can abort an in-flight clipboard write —
     // leaving the user on the AI site with nothing to paste.
