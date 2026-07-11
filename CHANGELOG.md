@@ -2,6 +2,24 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [0.5.1] - 2026-07-11
+
+### Fixed
+- **VirusTotal URL lookups**: URL indicators now open the `/gui/url/<id>` report route; the previous `/gui/search/<encoded-url>` 404'd on the encoded slashes.
+- **MV3 CSP**: Custom OSINT source and note-delete buttons used inline `onclick` (blocked on extension pages) and are now wired via event delegation.
+- **File hashes**: Removed the bogus "MD5" row (it printed a 32-bit non-cryptographic value); SHA-1 / SHA-256 only.
+- **IOC results**: Hash type filter now matches; defang/refang no longer corrupts copied/exported values; non-Latin1 IOCs no longer abort rendering.
+- **Ask AI**: Prompt is copied to the clipboard before the AI tab opens.
+- **CSV export**: Quotes are escaped and spreadsheet formula injection is neutralized.
+- **Service worker**: `getPendingAnalysis` survives worker restarts and clears stored selection; floating-window bounds listener no longer leaks; unmatched messages close the channel.
+- **Data cleanup**: "Clear old data" now also prunes enrichment / passive-DNS / ASN caches.
+
+### Added
+- `clipboardRead` permission for the Paste button.
+
+### Changed
+- MITRE sub-technique links use the `T####/###` path form; background defang matches the popup so output round-trips through refang.
+
 ## [0.5.0] - 2026-07-08
 
 ### Added

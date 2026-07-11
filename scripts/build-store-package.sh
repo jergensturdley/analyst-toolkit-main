@@ -50,10 +50,11 @@ REQUIRED_DIRS=(
   css
   webfonts
 )
+# Only ship what the extension needs at runtime plus the license. README /
+# CHANGELOG are repo docs, not loaded by the extension, so they stay out of the
+# store package.
 REQUIRED_DOCS=(
-  README.md
   LICENSE
-  CHANGELOG.md
 )
 
 for f in "${REQUIRED_FILES[@]}"; do
@@ -71,6 +72,10 @@ for d in "${REQUIRED_DIRS[@]}"; do
   fi
   cp -Rp "$d" "$STAGING_DIR/"
 done
+
+# Drop source-only assets the manifest never references (icon.svg is the master
+# artwork; the manifest ships the rendered PNGs).
+rm -f "$STAGING_DIR/icons/icon.svg"
 
 for f in "${REQUIRED_DOCS[@]}"; do
   if [ ! -f "$f" ]; then
