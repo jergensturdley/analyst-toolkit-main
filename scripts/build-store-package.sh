@@ -41,6 +41,7 @@ REQUIRED_FILES=(
   content.js
   popup.js
   popup.html
+  triage_prompt.js
   tlds.js
   vis-network.min.js
 )
