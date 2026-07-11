@@ -953,6 +953,31 @@ test('toCsvCell handles null/undefined', () => {
 console.log(' [PASS] CSV export cell escaping');
 
 
+// ==================== VirusTotal URL identifier ====================
+console.log('\n--- VirusTotal URL id Tests ---');
+
+// Mirror of vtUrlId in popup.js / background.js. VT's /gui/url/<id> report route
+// takes the unpadded base64url of the URL (VT canonicalizes server-side), which
+// is why /gui/search/<encoded-url> can't be used — its encoded slashes 404.
+function vtUrlId(url) {
+  const b = Buffer.from(url, 'utf8').toString('base64');
+  return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+test('vtUrlId matches VT unpadded base64url (verified against live GUI)', () => {
+  // /gui/url/aHR0cDovL3d3dy5nb29nbGUuY29tLw resolved to a real URL report.
+  assert.strictEqual(vtUrlId('http://www.google.com/'), 'aHR0cDovL3d3dy5nb29nbGUuY29tLw');
+});
+test('vtUrlId output is URL-safe and unpadded', () => {
+  const id = vtUrlId('https://example.com/a?b=c&d=e/f+g');
+  assert.ok(!/[+/=]/.test(id), 'must not contain +, / or =');
+});
+test('vtUrlId handles unicode without throwing', () => {
+  assert.doesNotThrow(() => vtUrlId('https://пример.рф/путь'));
+});
+console.log(' [PASS] VirusTotal URL id');
+
+
 console.log('Test Summary:');
 console.log('  Passed:', passed);
 console.log('  Failed:', failed);

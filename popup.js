@@ -15,6 +15,15 @@ function utf8ToBase64(text) {
   return btoa(binary);
 }
 
+// VirusTotal URL-report identifier: the unpadded base64url of the URL. VT
+// canonicalizes server-side, so this resolves for ANY URL — unlike a
+// client-side SHA-256, which would 404 unless it exactly matches VT's
+// canonicalization. Used for /gui/url/<id> links. The generic
+// /gui/search/<url> route can't be used for URLs: the encoded slashes 404.
+function vtUrlId(url) {
+  return utf8ToBase64(url).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 // Encode one CSV field. IOC values are attacker-controlled, so this both quotes
 // correctly (double embedded quotes, wrap the field) and neutralizes spreadsheet
 // formula injection by prefixing a leading =,+,-,@,tab or CR with an apostrophe.
@@ -60,7 +69,7 @@ function buildDefaultIocTable(grouped) {
   };
   const vtIp    = v => `[VirusTotal](https://www.virustotal.com/gui/ip-address/${encodeURIComponent(v)}) · [AbuseIPDB](https://www.abuseipdb.com/check/${encodeURIComponent(v)})`;
   const vtDom   = v => `[VirusTotal](https://www.virustotal.com/gui/domain/${encodeURIComponent(v)})`;
-  const vtUrl   = v => `[VirusTotal](https://www.virustotal.com/gui/url/${utf8ToBase64(v).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')})`;
+  const vtUrl   = v => `[VirusTotal](https://www.virustotal.com/gui/url/${vtUrlId(v)})`;
   const vtHash  = v => `[VirusTotal](https://www.virustotal.com/gui/file/${v})`;
   const noLinks = () => '—';
   const cveLinks    = v => `[NVD](https://nvd.nist.gov/vuln/detail/${v}) · [MITRE CVE](https://cve.mitre.org/cgi-bin/cvename.cgi?name=${v})`;
@@ -1423,9 +1432,10 @@ class SOCToolkit {
         if (chosen && chosen.url) {
           return `- [${chosen.name || i.value}](${chosen.url})`;
         }
-        // fallback to VirusTotal search
-        const enc = encodeURIComponent(i.value);
-        const vtUrl = `https://www.virustotal.com/gui/search/${enc}`;
+        // fallback to VirusTotal (URL report route for URLs, search otherwise)
+        const vtUrl = /^https?:\/\//i.test(i.value)
+          ? `https://www.virustotal.com/gui/url/${vtUrlId(i.value)}`
+          : `https://www.virustotal.com/gui/search/${encodeURIComponent(i.value)}`;
         return `- [${i.value}](${vtUrl})`;
       });
       content = mdLines.join('\n');
@@ -2159,8 +2169,14 @@ class SOCToolkit {
     const links = [];
 
     // Default OSINT Sources
-    // VirusTotal
-    links.push({ name: 'VirusTotal', url: `https://www.virustotal.com/gui/search/${enc}` });
+    // VirusTotal — URLs must use the /gui/url/<base64url-id> report route; the
+    // generic /gui/search/<encoded-url> 404s on the encoded slashes. IPs, domains
+    // and hashes have no slashes, so search resolves them fine.
+    if (category === 'url') {
+      links.push({ name: 'VirusTotal', url: `https://www.virustotal.com/gui/url/${vtUrlId(value)}` });
+    } else {
+      links.push({ name: 'VirusTotal', url: `https://www.virustotal.com/gui/search/${enc}` });
+    }
     // urlscan
     if (category === 'url' || category === 'domain') {
       links.push({ name: 'urlscan', url: `https://urlscan.io/search/#${enc}` });
@@ -3241,7 +3257,10 @@ class SOCToolkit {
               });
             } else if (it.id === 'open-vt') {
               const val = (node.title && node.title.includes(':')) ? node.title.split(':').slice(1).join(':').trim() : node.label;
-              window.open(`https://www.virustotal.com/gui/search/${encodeURIComponent(val)}`, '_blank');
+              const vtLink = /^https?:\/\//i.test(val)
+                ? `https://www.virustotal.com/gui/url/${vtUrlId(val)}`
+                : `https://www.virustotal.com/gui/search/${encodeURIComponent(val)}`;
+              window.open(vtLink, '_blank');
             } else if (it.id === 'open-cyberchef') {
               const val = (node.title && node.title.includes(':')) ? node.title.split(':').slice(1).join(':').trim() : node.label;
               chrome.storage.local.get(['cyberchefUrl'], (res) => {
