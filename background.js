@@ -10,6 +10,13 @@ function utf8ToBase64(text) {
   return btoa(binary);
 }
 
+// VirusTotal URL-report identifier: unpadded base64url of the URL. VT
+// canonicalizes server-side, so this resolves for any URL. Mirrors popup.js
+// vtUrlId. The generic /gui/search/<url> route 404s on encoded slashes.
+function vtUrlId(url) {
+  return utf8ToBase64(url).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 // Global variables
 let socSettings = {
   autoAnalyze: true,
@@ -1890,7 +1897,11 @@ async function openCyberChefRecipe(text, recipeKey) {
 }
 function openVirusTotalLookup(text) {
   const cleanText = text.trim();
-  const url = `https://www.virustotal.com/gui/search/${encodeURIComponent(cleanText)}`;
+  // URLs need the /gui/url/<base64url-id> report route; /gui/search 404s on the
+  // encoded slashes. Everything else (IP/domain/hash) resolves fine via search.
+  const url = /^https?:\/\//i.test(cleanText)
+    ? `https://www.virustotal.com/gui/url/${vtUrlId(cleanText)}`
+    : `https://www.virustotal.com/gui/search/${encodeURIComponent(cleanText)}`;
   chrome.tabs.create({ url });
 }
 
