@@ -1958,7 +1958,24 @@
       </div>
     </div>
   </div>
-  
+
+  <!-- First-use consent modal (enrichment + Ask AI) -->
+  <div id="consentModal" role="dialog" aria-modal="true" aria-labelledby="consentModalTitle" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:10001; justify-content:center; align-items:center;">
+    <div style="background:var(--bg-secondary); border:2px solid var(--border-primary); border-radius:12px; padding:20px; max-width:480px; width:90%; max-height:80vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-primary); padding-bottom:10px;">
+        <h3 id="consentModalTitle" style="margin:0; color:var(--text-primary); font-size:14px;">Send data to a third-party service?</h3>
+        <button id="consentCloseBtn" type="button" class="btn btn-small" style="background:transparent; border:none; color:var(--text-secondary); font-size:18px; cursor:pointer;" aria-label="Close consent dialog">&times;</button>
+      </div>
+      <div id="consentModalBody" style="color:var(--text-secondary); font-size:12px; line-height:1.5;">
+        <!-- Populated by popup.js -->
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button id="consentDenyBtn" type="button" class="btn btn-secondary btn-small">Cancel</button>
+        <button id="consentAllowBtn" type="button" class="btn btn-primary btn-small">Allow</button>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-nav" role="tablist">
     <button class="tab-btn active" data-tab="ioc" role="tab" aria-selected="true" aria-controls="ioc-tab">
       <i class="fa-solid fa-search" aria-hidden="true"></i>
@@ -1985,7 +2002,6 @@
       placeholder="Paste suspicious text, IPs, domains, URLs, emails, hashes, or defanged IOCs (hxxp://, [.] ) here for analysis..."
       id="iocInput"
       aria-label="IOC input — paste indicators of compromise here"></textarea>
-    <div id="snippetSuggestions" class="snippet-suggestions" role="listbox" aria-label="Snippet suggestions"></div>
 
     <div class="btn-group">
       <button class="btn btn-primary" id="analyzeBtn">
@@ -2514,6 +2530,31 @@
         </div>
       </div>
     </details>
+
+    <div class="settings-section" id="privacyConsentSection">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-user-shield" aria-hidden="true"></i> Privacy &amp; Consent
+      </div>
+      <div class="settings-section-body">
+        <p class="settings-hint">Enrichment and Ask AI send IOC data to third-party services. The first time you use either, you will be asked to confirm. You can revoke consent here at any time.</p>
+
+        <div class="settings-row-inline" style="flex-direction:column; align-items:stretch; gap:4px;">
+          <div class="settings-label-block">Enrichment consent</div>
+          <div id="consentStatusEnrichment" class="settings-hint">not yet granted (will be requested on first use)</div>
+        </div>
+
+        <div class="settings-row-inline" style="flex-direction:column; align-items:stretch; gap:4px;">
+          <div class="settings-label-block">Ask AI consent</div>
+          <div id="consentStatusAskAi" class="settings-hint">not yet granted (will be requested on first use)</div>
+        </div>
+
+        <div class="settings-row-inline">
+          <button id="resetConsentBtn" type="button" class="btn btn-secondary btn-small" title="Clear stored consent. You will be asked again the next time you use Enrichment or Ask AI.">
+            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reset consent prompts
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="settings-section" id="askAiSettingsSection">
       <div class="settings-section-header">

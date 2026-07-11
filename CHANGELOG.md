@@ -2,7 +2,10 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
-## [Unreleased]
+## [0.5.0] - 2026-07-08
+
+### Added
+- **Ask AI**: Replaces "Ask Claude" with a configurable clipboard-copy triage helper. Choose target AI chat from a preset dropdown (Claude / ChatGPT / Gemini / Copilot / Perplexity / Mistral / Custom…) and customize the prompt template via Settings. All processing local; no API keys; no streaming.
 
 ### Fixed
 - **CyberChef Integration**: Fixed URL encoding issue where highlighted text showed unexpected characters (e.g., %20, %21). CyberChef now correctly receives Base64 encoded input instead of URL encoded text.

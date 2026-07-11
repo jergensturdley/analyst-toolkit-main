@@ -1,0 +1,27 @@
+{
+  "name": "analyst-toolkit-main",
+  "version": "0.5.0",
+  "description": "A browser extension for security operations center (SOC) analysts and cybersecurity professionals to streamline the analysis of indicators of compromise (IOCs).",
+  "main": "background.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/verify_features.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jergensturdley/analyst-toolkit-main.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jergensturdley/analyst-toolkit-main/issues"
+  },
+  "homepage": "https://github.com/jergensturdley/analyst-toolkit-main#readme",
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  }
+}

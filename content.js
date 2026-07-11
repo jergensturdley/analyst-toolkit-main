@@ -10,7 +10,7 @@
 
   // Global variables for snippet system
   let snippets = [];
-  let snippetSystemEnabled = true;
+  let snippetSystemEnabled = false;
 
   // Listen for messages from the popup and background script
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -240,12 +240,16 @@
       transform: translateX(100%);
     `;
 
-    notification.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="color: ${borderColor}; font-size: 16px;">🛡️</span>
-        <span>${message}</span>
-      </div>
-    `;
+    const row = document.createElement('div');
+    row.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    const icon = document.createElement('span');
+    icon.style.cssText = `color: ${borderColor}; font-size: 16px;`;
+    icon.textContent = '🛡️';
+    const text = document.createElement('span');
+    text.textContent = String(message == null ? '' : message);
+    row.appendChild(icon);
+    row.appendChild(text);
+    notification.appendChild(row);
 
     document.body.appendChild(notification);
 
@@ -274,11 +278,11 @@
     try {
       chrome.storage.local.get(['socSettings'], (result) => {
         const settings = result.socSettings || {};
-        snippetSystemEnabled = settings.snippetSystemEnabled !== false; // default to true
+        snippetSystemEnabled = settings.snippetSystemEnabled === true;
       });
     } catch (e) {
       console.warn('SOC Toolkit: Could not load snippet settings:', e);
-      snippetSystemEnabled = true; // default to enabled
+      snippetSystemEnabled = false;
     }
   }
 
@@ -327,69 +331,91 @@
           backdrop-filter: blur(8px);
         `;
         
-        let content = `
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #374151; padding-bottom: 12px;">
-            <h3 style="margin: 0; color: #10b981; font-size: 16px;">🛡️ Copy Snippets</h3>
-            <span style="font-size: 11px; color: #9ca3af;">Ctrl+Alt+L to toggle</span>
-          </div>
-        `;
-        
+        // Build the list using safe DOM APIs (no innerHTML, no inline handlers)
+        const header = document.createElement('div');
+        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #374151; padding-bottom: 12px;';
+        const headerTitle = document.createElement('h3');
+        headerTitle.style.cssText = 'margin: 0; color: #10b981; font-size: 16px;';
+        headerTitle.textContent = '🛡️ Copy Snippets';
+        const headerHint = document.createElement('span');
+        headerHint.style.cssText = 'font-size: 11px; color: #9ca3af;';
+        headerHint.textContent = 'Ctrl+Alt+L to toggle';
+        header.appendChild(headerTitle);
+        header.appendChild(headerHint);
+        listContainer.appendChild(header);
+
         loadedSnippets.forEach((snippet, index) => {
           const title = snippet.name || `Snippet ${index + 1}`;
           const preview = (snippet.content || '').substring(0, 60) + (snippet.content && snippet.content.length > 60 ? '...' : '');
-          
-          content += `
-            <div style="margin-bottom: 12px; padding: 8px; background: #374151; border-radius: 6px; border-left: 3px solid #10b981; cursor: pointer; transition: background-color 0.2s;" 
-                 onmouseover="this.style.background='#4b5563'" 
-                 onmouseout="this.style.background='#374151'"
-                 onclick="copySnippetContent(${index})">
-              <div style="display: flex; gap: 12px; align-items: flex-start;">
-                <div style="flex: 1;">
-                  <div style="font-weight: 600; color: #e5e7eb; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-                    <span>📋</span>
-                    <span>${title}</span>
-                  </div>
-                  <div style="color: #9ca3af; font-size: 12px; line-height: 1.4;">${preview}</div>
-                </div>
-              </div>
-            </div>
-          `;
+
+          const card = document.createElement('div');
+          card.style.cssText = 'margin-bottom: 12px; padding: 8px; background: #374151; border-radius: 6px; border-left: 3px solid #10b981; cursor: pointer; transition: background-color 0.2s;';
+          card.setAttribute('data-snippet-index', String(index));
+
+          const row = document.createElement('div');
+          row.style.cssText = 'display: flex; gap: 12px; align-items: flex-start;';
+
+          const col = document.createElement('div');
+          col.style.cssText = 'flex: 1;';
+
+          const titleRow = document.createElement('div');
+          titleRow.style.cssText = 'font-weight: 600; color: #e5e7eb; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;';
+          const titleIcon = document.createElement('span');
+          titleIcon.textContent = '📋';
+          const titleText = document.createElement('span');
+          titleText.textContent = title;
+          titleRow.appendChild(titleIcon);
+          titleRow.appendChild(titleText);
+
+          const previewEl = document.createElement('div');
+          previewEl.style.cssText = 'color: #9ca3af; font-size: 12px; line-height: 1.4;';
+          previewEl.textContent = preview;
+
+          col.appendChild(titleRow);
+          col.appendChild(previewEl);
+          row.appendChild(col);
+          card.appendChild(row);
+          listContainer.appendChild(card);
         });
-        
-        content += `
-          <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #374151; text-align: center; color: #6b7280; font-size: 11px;">
-            Click any snippet to copy to clipboard • Press Esc to close
-          </div>
-        `;
-        
-        listContainer.innerHTML = content;
-        
-        // Store snippets in namespaced object to avoid global pollution
+
+        const footer = document.createElement('div');
+        footer.style.cssText = 'margin-top: 16px; padding-top: 12px; border-top: 1px solid #374151; text-align: center; color: #6b7280; font-size: 11px;';
+        footer.textContent = 'Click any snippet to copy to clipboard • Press Esc to close';
+        listContainer.appendChild(footer);
+
+        // Store snippets in namespaced object
         if (!window.__socToolkit) {
           window.__socToolkit = {};
         }
         window.__socToolkit.snippets = loadedSnippets;
-        
-        // Add namespaced copy function
-        window.__socToolkit.copySnippetContent = function(index) {
-          const snippet = window.__socToolkit.snippets[index];
-          if (snippet && snippet.content) {
-            const processedContent = processSnippetContent(snippet.content);
-            copyToClipboard(processedContent);
-            listContainer.remove();
-          }
-        };
-        
-        // Legacy support for inline onclick handlers
-        window.copySnippetContent = window.__socToolkit.copySnippetContent;
-        
-        // Add click-to-close and escape key handler
+
+        // Click handler (event delegation; replaces inline onclick + onmouseover)
         listContainer.addEventListener('click', (e) => {
+          const card = e.target.closest('[data-snippet-index]');
+          if (card) {
+            const idx = parseInt(card.getAttribute('data-snippet-index'), 10);
+            const snippet = window.__socToolkit.snippets[idx];
+            if (snippet && snippet.content) {
+              const processedContent = processSnippetContent(snippet.content);
+              copyToClipboard(processedContent);
+              listContainer.remove();
+            }
+            return;
+          }
           if (e.target === listContainer) {
             listContainer.remove();
           }
         });
-        
+
+        listContainer.addEventListener('mouseover', (e) => {
+          const card = e.target.closest('[data-snippet-index]');
+          if (card) card.style.background = '#4b5563';
+        });
+        listContainer.addEventListener('mouseout', (e) => {
+          const card = e.target.closest('[data-snippet-index]');
+          if (card) card.style.background = '#374151';
+        });
+
         const closeOnEscape = (e) => {
           if (e.key === 'Escape') {
             listContainer.remove();
@@ -397,7 +423,7 @@
           }
         };
         document.addEventListener('keydown', closeOnEscape);
-        
+
         document.body.appendChild(listContainer);
         
         // Auto-remove after 15 seconds
@@ -415,11 +441,6 @@
 
 
 
-
-
-  function highlightIOCsOnPage(iocs) {
-    showPageNotification(`🔍 IOC highlighting: ${iocs.length} indicators`, 'info');
-  }
 
   function loadSnippets(callback) {
     try {
