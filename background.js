@@ -25,8 +25,9 @@ let socSettings = {
 };
 let pendingAnalysis = null;
 let floatingWindow = null;
+// Only geometry is persisted — an "isOpen" flag used to live here and drove an
+// auto-restore on browser launch; see the note at the onInstalled handler.
 let floatingWindowState = {
-  isOpen: false,
   width: 850,
   height: 700,
   left: 100,
@@ -1499,23 +1500,15 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     });
   }
 
-  // Restore floating window if it was open
-  await loadFloatingWindowState();
-  if (floatingWindowState.isOpen) {
-    await restoreFloatingWindow();
-  }
-
   // Always set up context menus on installation or update
   setupContextMenus();
 });
 
-// Startup handler - restore floating window if it was open
-chrome.runtime.onStartup.addListener(async () => {
-  await loadFloatingWindowState();
-  if (floatingWindowState.isOpen) {
-    await restoreFloatingWindow();
-  }
-});
+// NOTE: no floating-window restore on onInstalled/onStartup. A browser quit
+// never fires windows.onRemoved for the floating window, so a persisted
+// "isOpen" flag stayed true forever and the popout auto-opened on every
+// browser launch. The floating window now opens only on user action
+// (toolbar button / toggleFloat); only its geometry is persisted.
 
 // Function to set up all context menus
 function setupContextMenus() {
@@ -1703,7 +1696,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       pendingAnalysis = selectedText;
       chrome.storage.local.set({ pendingAnalysis });
       updateBadge(true);
-      chrome.action.openPopup();
+      // openPopup can reject (e.g. another popup focused); the badge already
+      // flags the pending analysis, so a failed open is not fatal.
+      Promise.resolve(chrome.action.openPopup()).catch(() => {});
       break;
       
     case 'lookup-virustotal':
@@ -2019,11 +2014,11 @@ function defangAndCopy(text) {
 
 function extractIOCsOnly(text) {
   // Use the same IOC extraction logic from popup.js
-  chrome.storage.local.set({ 
+  chrome.storage.local.set({
     pendingAction: 'extract-iocs',
-    pendingText: text 
+    pendingText: text
   });
-  chrome.action.openPopup();
+  Promise.resolve(chrome.action.openPopup()).catch(() => {});
 }
 
 function urlDecodeText(text) {
@@ -2430,10 +2425,9 @@ async function ensureContentScript(tabId) {
 
 // Command handler
 chrome.commands.onCommand.addListener((command) => {
-  if (command === '_execute_action') {
-    // Handle keyboard shortcut
-    chrome.action.openPopup();
-  } else if (command === 'toggle-snippets') {
+  // Note: '_execute_action' is a reserved command — Chrome opens the popup
+  // itself and never delivers it to onCommand, so there is no branch for it.
+  if (command === 'toggle-snippets') {
     // Toggle snippet expansion in active tab (inject content.js first; do not auto-inject on every page)
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       if (!tabs || !tabs[0]) return;
@@ -2473,39 +2467,6 @@ async function loadFloatingWindowState() {
   }
 }
 
-async function restoreFloatingWindow() {
-  try {
-    // Check if the window still exists
-    if (floatingWindow) {
-      try {
-        await chrome.windows.get(floatingWindow.id);
-        return; // Window still exists, no need to restore
-      } catch {
-        floatingWindow = null; // Window doesn't exist anymore
-      }
-    }
-
-    // Create new floating window with saved state
-    const window = await chrome.windows.create({
-      url: chrome.runtime.getURL('popup.html'),
-      type: 'popup',
-      width: floatingWindowState.width,
-      height: floatingWindowState.height,
-      left: floatingWindowState.left,
-      top: floatingWindowState.top,
-      focused: false
-    });
-
-    floatingWindow = window;
-    floatingWindowState.isOpen = true;
-    await saveFloatingWindowState();
-  } catch (error) {
-    console.error('Error restoring floating window:', error);
-    floatingWindowState.isOpen = false;
-    await saveFloatingWindowState();
-  }
-}
-
 // Floating window management
 async function handleFloatingWindow(sendResponse) {
   try {
@@ -2513,13 +2474,13 @@ async function handleFloatingWindow(sendResponse) {
     if (floatingWindow) {
       await chrome.windows.remove(floatingWindow.id);
       floatingWindow = null;
-      floatingWindowState.isOpen = false;
-      await saveFloatingWindowState();
       sendResponse({ success: true, action: 'closed' });
       return;
     }
 
-    // Create new floating window
+    // Create new floating window at the last saved geometry (the service
+    // worker may have restarted since the bounds were recorded).
+    await loadFloatingWindowState();
     const window = await chrome.windows.create({
       url: chrome.runtime.getURL('popup.html'),
       type: 'popup',
@@ -2531,8 +2492,6 @@ async function handleFloatingWindow(sendResponse) {
     });
 
     floatingWindow = window;
-    floatingWindowState.isOpen = true;
-    await saveFloatingWindowState();
 
     // Listen for window position/size changes. Guard on floatingWindow: once the
     // window closes this listener must not dereference a null floatingWindow.id.
@@ -2550,8 +2509,6 @@ async function handleFloatingWindow(sendResponse) {
     const onRemovedListener = (windowId) => {
       if (!floatingWindow || windowId !== floatingWindow.id) return;
       floatingWindow = null;
-      floatingWindowState.isOpen = false;
-      saveFloatingWindowState();
       chrome.windows.onRemoved.removeListener(onRemovedListener);
       chrome.windows.onBoundsChanged.removeListener(onBoundsChangedListener);
     };

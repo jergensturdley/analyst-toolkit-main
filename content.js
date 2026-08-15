@@ -8,8 +8,8 @@
   if (window.socToolkitInjected) return;
   window.socToolkitInjected = true;
 
-  // Global variables for snippet system
-  let snippets = [];
+  // Global state for snippet system (the snippet list itself is read from
+  // chrome.storage on demand in showSnippetsForCopy)
   let snippetSystemEnabled = false;
 
   // Listen for messages from the popup and background script
@@ -396,8 +396,9 @@
             const idx = parseInt(card.getAttribute('data-snippet-index'), 10);
             const snippet = window.__socToolkit.snippets[idx];
             if (snippet && snippet.content) {
-              const processedContent = processSnippetContent(snippet.content);
-              copyToClipboard(processedContent);
+              // Copy the raw content — the old processSnippetContent() call
+              // referenced a function that was never defined and threw on click.
+              copyToClipboard(snippet.content);
               listContainer.remove();
             }
             return;
@@ -442,22 +443,7 @@
 
 
 
-  function loadSnippets(callback) {
-    try {
-      chrome.storage.local.get(["snippets"], (result) => {
-        snippets = Array.isArray(result.snippets) ? result.snippets : [];
-        if (callback) callback();
-      });
-    } catch (e) {
-      console.error("SOC Toolkit: Error loading snippets:", e);
-      snippets = [];
-      if (callback) callback();
-    }
-  }
-
   // Initialize snippet system
-  loadSnippets(() => {
-    setupSnippetSystem();
-  });
+  setupSnippetSystem();
 
 })();

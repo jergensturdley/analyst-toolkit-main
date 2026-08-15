@@ -2,6 +2,16 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [0.5.2] - 2026-08-14
+
+### Fixed
+- **Floating window no longer auto-opens on browser launch.** A persisted "open" flag was never cleared on browser quit, so the popout re-created itself at every startup. It now opens only from the toolbar button; window size/position are still remembered.
+- **Page snippet overlay**: clicking a snippet threw a `ReferenceError` (undefined helper) and never copied — now copies the snippet content.
+- **Settings**: changing theme / auto-analyze / graph toggles no longer resets the page-snippet-system toggle and bulk link preference (settings are merged instead of overwritten).
+
+### Changed
+- Triage prompt builder consolidated into `triage_prompt.js` (single implementation shared by popup and tests); removed duplicated and dead code across popup, background, and content scripts.
+
 ## [0.5.1] - 2026-07-11
 
 ### Fixed
