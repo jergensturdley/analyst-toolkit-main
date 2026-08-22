@@ -14,6 +14,11 @@ There is no build/bundle step. A `package.json` exists but only to pull in Playw
 # Run the offline feature/parsing test suite (Node, ~no setup)
 node tests/verify_features.js
 
+# Build store packages (clean tree required)
+#   scripts/build-store-package.sh            → dist/soc-analyst-toolkit-<v>.zip (Chrome)
+#   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.zip
+#     (same source; manifest patched to event-page background + gecko settings)
+
 # Load the extension in Chrome
 #   chrome://extensions → enable Developer mode → "Load unpacked" → select this directory.
 # Changes are picked up via the service-worker reload button; popup.js/html edits require closing+reopening the popup.

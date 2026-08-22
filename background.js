@@ -2510,11 +2510,17 @@ async function handleFloatingWindow(sendResponse) {
       if (!floatingWindow || windowId !== floatingWindow.id) return;
       floatingWindow = null;
       chrome.windows.onRemoved.removeListener(onRemovedListener);
-      chrome.windows.onBoundsChanged.removeListener(onBoundsChangedListener);
+      if (chrome.windows.onBoundsChanged) {
+        chrome.windows.onBoundsChanged.removeListener(onBoundsChangedListener);
+      }
     };
 
     chrome.windows.onRemoved.addListener(onRemovedListener);
-    chrome.windows.onBoundsChanged.addListener(onBoundsChangedListener);
+    // Chrome-only API — Firefox has no windows.onBoundsChanged, so there the
+    // floating window simply reopens at the default geometry.
+    if (chrome.windows.onBoundsChanged) {
+      chrome.windows.onBoundsChanged.addListener(onBoundsChangedListener);
+    }
 
     sendResponse({ success: true, windowId: window.id, action: 'opened' });
   } catch (error) {

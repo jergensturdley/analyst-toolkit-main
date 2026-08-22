@@ -1194,6 +1194,12 @@ class SOCToolkit {
   // Get storage usage info
   async getStorageUsage() {
     return new Promise((resolve) => {
+      // Firefox has no storage.local.getBytesInUse — resolve null and let the
+      // caller hide the indicator instead of throwing.
+      if (typeof chrome.storage.local.getBytesInUse !== 'function') {
+        resolve(null);
+        return;
+      }
       chrome.storage.local.getBytesInUse(null, (bytes) => {
         const maxBytes = chrome.storage.local.QUOTA_BYTES || 5242880; // 5MB default
         resolve({
@@ -1223,6 +1229,10 @@ class SOCToolkit {
     if (!indicator) return;
 
     const usage = await this.getStorageUsage();
+    if (!usage) {
+      indicator.style.display = 'none';
+      return;
+    }
     if (bar) bar.style.width = `${usage.percent}%`;
     if (text) text.textContent = `${usage.usedFormatted} / ${usage.maxFormatted} (${usage.percent}%)`;
 
