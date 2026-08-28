@@ -59,7 +59,7 @@ async function shot(page, file, opts = {}) {
 
   // The cached "chrome-headless-shell" binary fails on this Mac (Mach port
   // permission denied). Use the full Chrome-for-Testing binary instead.
-  const chromePath = '/Users/jhonniey/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+  const chromePath = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false, // Extensions only load with a window server on macOS.
