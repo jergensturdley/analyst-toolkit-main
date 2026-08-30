@@ -64,15 +64,27 @@ This extension provides a suite of tools to accelerate the investigation of secu
 
 ### Privacy & Security
 - **Privacy-Focused**: All data processing and storage happens locally in your browser
-- **No Tracking**: No external data transmission, analytics, or telemetry
+- **No Tracking**: No analytics or telemetry, and no data transmission beyond the OSINT lookups you initiate
 - **Open Source**: Fully transparent codebase for security review
 
 ## Installation
+
+### Chrome
 
 1. Open your browser and navigate to `chrome://extensions/`.
 2. Enable "Developer mode".
 3. Click "Load unpacked" and select the directory containing this project's files.
 4. Pin the extension to your toolbar for easy access.
+
+### Firefox
+
+Requires Firefox 128 or later. The checked-in `manifest.json` targets Chrome, so build the Firefox variant before loading it — Firefox MV3 has no service workers, and the build rewrites the background to an event page and adds the `browser_specific_settings.gecko` block.
+
+1. Run `scripts/build-store-package.sh firefox` from the repository root. The build refuses to run on a dirty tree, so commit or stash first. It writes `dist/staging-firefox/` and `dist/soc-analyst-toolkit-firefox-<version>.zip`.
+2. Navigate to `about:debugging#/runtime/this-firefox`.
+3. Click "Load Temporary Add-on" and select `dist/staging-firefox/manifest.json`.
+
+Temporary add-ons are removed when Firefox closes, so repeat step 3 after each restart.
 
 ## Usage
 
@@ -86,7 +98,8 @@ This extension provides a suite of tools to accelerate the investigation of secu
 ## Technical Details
 
 - **Manifest Version**: 3
-- **Permissions**: `storage`, `clipboardWrite`, `contextMenus`, `notifications`, `activeTab`.
+- **Permissions**: `storage`, `clipboardWrite`, `clipboardRead`, `contextMenus`, `notifications`, `activeTab`, `scripting`.
+- **Host Permissions**: Scoped to the OSINT and CyberChef domains the extension queries — see `manifest.json` for the full list.
 - **Storage**: Uses local browser storage for all user data.
 
 ## Contributing

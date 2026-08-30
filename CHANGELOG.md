@@ -4,6 +4,10 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
 ## [0.5.2] - 2026-08-14
 
+### Added
+- **Firefox support.** `scripts/build-store-package.sh firefox` builds an AMO package from the same source, rewriting the background service worker to an event page (Firefox MV3 has no service workers) and adding the `browser_specific_settings.gecko` block. Requires Firefox 128 or later.
+- **Guards for two Chrome-only APIs** so the extension runs under Firefox: `windows.onBoundsChanged` (on Firefox the floating window reopens at default geometry instead of remembering size and position) and `storage.local.getBytesInUse` (the storage usage indicator is hidden rather than throwing).
+
 ### Fixed
 - **Floating window no longer auto-opens on browser launch.** A persisted "open" flag was never cleared on browser quit, so the popout re-created itself at every startup. It now opens only from the toolbar button; window size/position are still remembered.
 - **Page snippet overlay**: clicking a snippet threw a `ReferenceError` (undefined helper) and never copied — now copies the snippet content.
