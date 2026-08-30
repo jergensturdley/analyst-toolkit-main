@@ -64,7 +64,7 @@ This extension provides a suite of tools to accelerate the investigation of secu
 
 ### Privacy & Security
 - **Privacy-Focused**: All data processing and storage happens locally in your browser
-- **No Tracking**: No external data transmission, analytics, or telemetry
+- **No Tracking**: No analytics or telemetry, and no data transmission beyond the OSINT lookups you initiate
 - **Open Source**: Fully transparent codebase for security review
 
 ## Installation
@@ -86,7 +86,8 @@ This extension provides a suite of tools to accelerate the investigation of secu
 ## Technical Details
 
 - **Manifest Version**: 3
-- **Permissions**: `storage`, `clipboardWrite`, `contextMenus`, `notifications`, `activeTab`.
+- **Permissions**: `storage`, `clipboardWrite`, `clipboardRead`, `contextMenus`, `notifications`, `activeTab`, `scripting`.
+- **Host Permissions**: Scoped to the OSINT and CyberChef domains the extension queries — see `manifest.json` for the full list.
 - **Storage**: Uses local browser storage for all user data.
 
 ## Contributing
