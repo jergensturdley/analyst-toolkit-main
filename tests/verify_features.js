@@ -978,6 +978,135 @@ test('vtUrlId handles unicode without throwing', () => {
 console.log(' [PASS] VirusTotal URL id');
 
 
+// ==================== IPAddress.to enrichment normalization ====================
+console.log('\n--- IPAddress.to Normalization Tests ---');
+
+// === IPAddress.to enrichment normalization (mock-mirrors background.js helpers) ===
+
+// Mirror of production normalizeIpAddressTo(ip, lookup, score)
+function normalizeIpAddressToMock(ip, lookup, score) {
+  const data = {};
+  const loc = (lookup && lookup.location) || {};
+  const asn = (lookup && lookup.asn) || {};
+  const company = (lookup && lookup.company) || {};
+  if (lookup && lookup.rdns) data.rdns = lookup.rdns;
+  if (loc.country) data.country = loc.country;
+  if (loc.country_code) data.country_code = loc.country_code;
+  if (loc.state) data.state = loc.state;
+  if (loc.city) data.city = loc.city;
+  if (typeof loc.latitude === 'number') data.latitude = String(loc.latitude);
+  if (typeof loc.longitude === 'number') data.longitude = String(loc.longitude);
+  if (loc.timezone) data.timezone = loc.timezone;
+  if (asn.asn) data.asn = `AS${asn.asn}`;
+  if (asn.org || asn.descr) data.as_org = asn.org || asn.descr;
+  if (company.name) data.isp = company.name;
+  if (company.type) data.company_type = company.type;
+  // Connection flags: always present as 'true'/'false' strings — absence of a
+  // flag is meaningful (unknown) only on error, which never reaches here.
+  ['is_vpn', 'is_proxy', 'is_tor', 'is_hosting'].forEach((f) => {
+    if (lookup && typeof lookup[f] === 'boolean') data[f] = String(lookup[f]);
+  });
+  if (score && typeof score.score === 'number') data.fraud_score = String(score.score);
+  if (score && score.risk) data.fraud_risk = score.risk;
+
+  const nodes = [];
+  const edges = [];
+  // Same id scheme as fetchIpInfo so dedupeById merges across sources instead
+  // of duplicating geo/ASN nodes in the graph.
+  const geoLabel = [loc.city, loc.state, loc.country].filter(Boolean).join(', ');
+  // Country alone is too coarse for a geo node — require city or state.
+  if ((loc.city || loc.state) && geoLabel) {
+    const geoId = `geo_${ip.replace(/[.:]/g, '_')}`;
+    nodes.push({ id: geoId, label: geoLabel, type: 'geo', properties: { city: loc.city, region: loc.state, country: loc.country, loc: `${loc.latitude},${loc.longitude}`, timezone: loc.timezone } });
+    edges.push({ id: `edge_${ip}_geo`, from: ip, to: geoId, label: 'observed-at', properties: { source: 'ipaddressto' } });
+  }
+  if (asn.asn) {
+    const asnId = `asn_${asn.asn}`;
+    nodes.push({ id: asnId, label: `AS${asn.asn}`, type: 'asn', properties: { name: asn.descr, org: asn.org } });
+    edges.push({ id: `edge_${ip}_asn`, from: ip, to: asnId, label: 'belongs-to', properties: { source: 'ipaddressto' } });
+  }
+  return { data, nodes, edges };
+}
+
+// Mirror of the ipaddressto block inside production buildIpSummary
+function applyIpToSummaryMock(summary, sources) {
+  const ipto = sources.find((s) => s.provider === 'ipaddressto' && s.status === 'success');
+  if (!ipto || !ipto.data) return summary;
+  const d = ipto.data;
+  if (d.is_vpn === 'true') summary.tags.push('vpn');
+  if (d.is_proxy === 'true') summary.tags.push('proxy');
+  if (d.is_tor === 'true') summary.tags.push('tor');
+  // Fallback risk ONLY when AbuseIPDB contributed nothing
+  const abuse = sources.find((s) => s.provider === 'abuseipdb' && s.status === 'success');
+  if (!abuse && d.fraud_score !== undefined) {
+    const fs = Number(d.fraud_score);
+    summary.riskScore = fs;
+    summary.confidence = Math.min(1, fs / 100);
+    summary.verdict = fs >= 75 ? 'malicious' : fs >= 40 ? 'suspicious' : 'clean';
+  }
+  return summary;
+}
+
+test('IPAddress.to normalize: full lookup + score payload', () => {
+  const lookup = {
+    success: true, ip: '8.8.8.8', rdns: 'dns.google',
+    location: { country: 'United States', country_code: 'US', state: 'California', city: 'Mountain View', latitude: 37.422, longitude: -122.085, timezone: 'America/Los_Angeles' },
+    asn: { asn: 15169, descr: 'Google LLC', org: 'Google LLC' },
+    company: { name: 'Google LLC', type: 'business' },
+    is_vpn: false, is_proxy: false, is_tor: false, is_hosting: true
+  };
+  const score = { success: true, score: 3, risk: 'low' };
+  const { data, nodes, edges } = normalizeIpAddressToMock('8.8.8.8', lookup, score);
+  assert.strictEqual(data.rdns, 'dns.google');
+  assert.strictEqual(data.country, 'United States');
+  assert.strictEqual(data.latitude, '37.422');
+  assert.strictEqual(data.asn, 'AS15169');
+  assert.strictEqual(data.as_org, 'Google LLC');
+  assert.strictEqual(data.isp, 'Google LLC');
+  assert.strictEqual(data.is_hosting, 'true');
+  assert.strictEqual(data.is_vpn, 'false');
+  assert.strictEqual(data.fraud_score, '3');
+  assert.strictEqual(data.fraud_risk, 'low');
+  assert.ok(nodes.some((n) => n.id === 'geo_8_8_8_8' && n.type === 'geo'), 'geo node expected');
+  assert.ok(nodes.some((n) => n.id === 'asn_15169' && n.type === 'asn'), 'asn node expected');
+  assert.ok(edges.some((e) => e.id === 'edge_8.8.8.8_geo' && e.label === 'observed-at'), 'geo edge expected');
+  assert.ok(edges.some((e) => e.id === 'edge_8.8.8.8_asn' && e.label === 'belongs-to'), 'asn edge expected');
+});
+
+test('IPAddress.to normalize: null/missing fields dropped, null score tolerated', () => {
+  const lookup = { success: true, ip: '1.2.3.4', rdns: null, location: { country: 'X' }, asn: { asn: 64512 }, company: { name: null }, is_vpn: true, is_proxy: null, is_tor: false, is_hosting: false };
+  const { data, nodes, edges } = normalizeIpAddressToMock('1.2.3.4', lookup, null);
+  assert.ok(!('rdns' in data), 'null rdns must be dropped');
+  assert.ok(!('fraud_score' in data), 'null score must be dropped');
+  assert.ok(!('is_proxy' in data), 'null flag must be dropped');
+  assert.strictEqual(data.is_vpn, 'true');
+  assert.strictEqual(nodes.length, 1, 'only asn node when no city');
+  assert.strictEqual(nodes[0].id, 'asn_64512');
+  assert.ok(!edges.some((e) => e.id === 'edge_1.2.3.4_geo'), 'no geo edge without geo node');
+});
+
+test('IPAddress.to summary: flags become tags, fraud_score fills risk only without AbuseIPDB', () => {
+  const ipto = { provider: 'ipaddressto', status: 'success', data: { is_vpn: 'false', is_proxy: 'true', is_tor: 'false', fraud_score: '82' } };
+  let s = applyIpToSummaryMock({ verdict: 'unknown', confidence: 0, tags: [], riskScore: 0 }, [ipto]);
+  assert.deepStrictEqual(s.tags, ['proxy']);
+  assert.strictEqual(s.riskScore, 82);
+  assert.strictEqual(s.verdict, 'malicious');
+
+  const abuse = { provider: 'abuseipdb', status: 'success', data: { abuseConfidenceScore: 10 } };
+  s = applyIpToSummaryMock({ verdict: 'clean', confidence: 0.1, tags: [], riskScore: 10 }, [abuse, ipto]);
+  assert.strictEqual(s.riskScore, 10, 'AbuseIPDB score must win');
+  assert.strictEqual(s.verdict, 'clean');
+  assert.deepStrictEqual(s.tags, ['proxy'], 'flags still tagged when AbuseIPDB present');
+});
+
+test('IPAddress.to summary: non-success source is ignored', () => {
+  const s = applyIpToSummaryMock({ verdict: 'unknown', confidence: 0, tags: [], riskScore: 0 }, [{ provider: 'ipaddressto', status: 'error', data: { fraud_score: '99' } }]);
+  assert.strictEqual(s.riskScore, 0);
+  assert.deepStrictEqual(s.tags, []);
+});
+console.log(' [PASS] IPAddress.to Normalization');
+
+
 console.log('Test Summary:');
 console.log('  Passed:', passed);
 console.log('  Failed:', failed);
