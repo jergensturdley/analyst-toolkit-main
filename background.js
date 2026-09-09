@@ -51,7 +51,8 @@ const RATE_LIMITS = {
   virustotal: { requests: 4, window: 60 * 1000, backoff: 15 * 60 * 1000 },
   urlscan: { requests: 100, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
   urlhaus: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
-  phishtank: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 }
+  phishtank: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
+  ipaddressto: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 }
 };
 
 const MAX_RATE_LIMIT_PROVIDERS = 1000;
@@ -319,7 +320,8 @@ async function runIpAgent(ip, options = {}) {
     isEnabled('ipinfo')    ? fetchIpInfo(ip, keys.ipinfoApiKey)              : Promise.resolve(null),
     isEnabled('abuseipdb') ? fetchAbuseIPDB(ip, keys.abuseipdbApiKey)        : Promise.resolve(null),
     isEnabled('greynoise') ? fetchGreyNoise(ip, keys.greynoiseApiKey)        : Promise.resolve(null),
-    isEnabled('virustotal')? fetchVirusTotalIp(ip, keys.virustotalApiKey)    : Promise.resolve(null)
+    isEnabled('virustotal')? fetchVirusTotalIp(ip, keys.virustotalApiKey)    : Promise.resolve(null),
+    isEnabled('ipaddressto') ? fetchIpAddressTo(ip)                            : Promise.resolve(null)
   ];
 
   const settledResults = await Promise.allSettled(tasks);
@@ -695,6 +697,57 @@ async function fetchGreyNoise(ip, apiKey) {
     };
   } catch (err) {
     return { provider: 'greynoise', displayName: 'GreyNoise', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+  }
+}
+
+async function fetchIpAddressTo(ip) {
+  try {
+    if (!rateLimiter.canMakeRequest('ipaddressto')) {
+      return {
+        provider: 'ipaddressto',
+        displayName: 'IPAddress.to',
+        status: 'error',
+        errorCode: 'RATE_LIMIT_EXCEEDED',
+        errorMessage: `Try again in ${Math.ceil(rateLimiter.timeUntilAvailable('ipaddressto') / 1000)}s`
+      };
+    }
+    const opts = { headers: { Accept: 'application/json', 'User-Agent': 'SOC-Analyst-Toolkit-Extension' } };
+    const [lookupRes, scoreRes] = await Promise.allSettled([
+      fetchWithBackoff(`https://ipaddress.to/api/lookup/${encodeURIComponent(ip)}`, opts),
+      fetchWithBackoff(`https://ipaddress.to/api/score/${encodeURIComponent(ip)}`, opts)
+    ]);
+    rateLimiter.recordRequest('ipaddressto');
+    if (lookupRes.status !== 'fulfilled' || !lookupRes.value.ok) {
+      return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: lookupRes.status === 'rejected' ? lookupRes.reason.message : `HTTP ${lookupRes.value.status}` };
+    }
+    const lookup = await lookupRes.value.json();
+    if (!lookup || lookup.success !== true) {
+      return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NO_DATA', errorMessage: (lookup && lookup.error) || 'Lookup returned no data' };
+    }
+    // Score endpoint failing alone degrades gracefully: card renders without fraud fields.
+    let score = null;
+    if (scoreRes.status === 'fulfilled' && scoreRes.value.ok) {
+      try {
+        const j = await scoreRes.value.json();
+        if (j && j.success === true) score = j;
+      } catch (e) { /* non-fatal */ }
+    }
+    const { data, nodes, edges } = normalizeIpAddressTo(ip, lookup, score);
+    return {
+      provider: 'ipaddressto',
+      displayName: 'IPAddress.to',
+      status: 'success',
+      cached: false,
+      data,
+      nodes,
+      edges,
+      // Website analysis page, not the raw API endpoint — the "Source" button
+      // in the enrichment panel renders this URL (https-only guarded).
+      apiUrl: `https://ipaddress.to/lookup/${encodeURIComponent(ip)}`,
+      metadata: { ttlSeconds: 24 * 60 * 60, fetchedAt: Date.now() }
+    };
+  } catch (err) {
+    return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 

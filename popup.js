@@ -857,7 +857,7 @@ class SOCToolkit {
       });
     });
 
-    const providerIds = ['ipinfo', 'abuseipdb', 'greynoise', 'virustotal', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
+    const providerIds = ['ipinfo', 'abuseipdb', 'greynoise', 'virustotal', 'ipaddressto', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
     chrome.storage.local.get(['enrichmentProviders'], (res) => {
       const saved = res.enrichmentProviders || {};
       providerIds.forEach((pid) => {
