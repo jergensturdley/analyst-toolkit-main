@@ -2,6 +2,13 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [0.5.3] - Unreleased
+
+### Added
+- IPAddress.to as a keyless IP enrichment source (geolocation, ASN, VPN/proxy/Tor flags, fraud score with AbuseIPDB as primary)
+- IPAddress.to OSINT link + right-click "Check in IPAddress.to" lookup
+- Per-field copy buttons on enrichment source cards
+
 ## [0.5.2] - 2026-08-14
 
 ### Added

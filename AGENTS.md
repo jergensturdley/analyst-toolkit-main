@@ -1159,6 +1159,7 @@ Each agent follows a consistent implementation pattern. Use these specifications
 | Source | Data Provided | API Key | Rate Limit | Cost | Priority |
 |--------|---------------|---------|------------|------|----------|
 | **ipinfo.io** | Geo, ASN, ISP, org | Optional (free tier) | 50k/month | Free | Primary |
+| **IPAddress.to** | Geo, ASN, rDNS, company, VPN/proxy/Tor flags, fraud score | No (optional free key) | Fair use (500/day in extension) | Free | Primary |
 | **AbuseIPDB** | Abuse reports, confidence score | Yes | 1k/day | Free | High |
 | **GreyNoise** | Noise classification, tags | Yes (community) | 100/day | Free | High |
 | **VirusTotal** | Passive DNS, ASN, prefix, registry | Yes | 4/min | Free | Medium |
@@ -1177,6 +1178,11 @@ Each agent follows a consistent implementation pattern. Use these specifications
     - Endpoint: `https://ipinfo.io/{ip}/json` (token optional: `?token={key}`)
     - Parse: city, region, country, loc, org, postal, timezone
     - Fallback: No API key required for basic info
+  - [x] Implement `fetchIpAddressTo()` for keyless geo/ASN/fraud-score enrichment
+    - Endpoints: `https://ipaddress.to/api/lookup/{ip}` + `https://ipaddress.to/api/score/{ip}` (parallel)
+    - Header: `User-Agent: SOC-Analyst-Toolkit-Extension` (provider request)
+    - Parse: location, asn, company, is_vpn/is_proxy/is_tor/is_hosting, score/risk
+    - Note: keyless + CORS-open; fraud score is fallback risk only when AbuseIPDB is absent
   - [ ] Implement `fetchAbuseIPDB()` for AbuseIPDB
     - Endpoint: `https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90`
     - Header: `Key: {apiKey}`, `Accept: application/json`
@@ -1549,6 +1555,7 @@ Each agent follows a consistent implementation pattern. Use these specifications
 - **AbuseIPDB**: https://www.abuseipdb.com/api
 - **GreyNoise**: https://docs.greynoise.io/reference/get_v3-community-ip
 - **ipinfo.io**: https://ipinfo.io/developers
+- **IPAddress.to**: https://ipaddress.to/api/docs/
 - **Shodan**: https://developer.shodan.io/api
 - **Censys**: https://search.censys.io/api
 
