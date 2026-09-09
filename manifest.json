@@ -18,6 +18,7 @@
     "https://www.virustotal.com/*",
     "https://www.abuseipdb.com/*",
     "https://api.abuseipdb.com/*",
+    "https://ipaddress.to/*",
     "https://ipinfo.io/*",
     "https://api.greynoise.io/*",
     "https://viz.greynoise.com/*",

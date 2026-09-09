@@ -1017,7 +1017,7 @@ function normalizeIpAddressToMock(ip, lookup, score) {
   // Country alone is too coarse for a geo node — require city or state.
   if ((loc.city || loc.state) && geoLabel) {
     const geoId = `geo_${ip.replace(/[.:]/g, '_')}`;
-    nodes.push({ id: geoId, label: geoLabel, type: 'geo', properties: { city: loc.city, region: loc.state, country: loc.country, loc: `${loc.latitude},${loc.longitude}`, timezone: loc.timezone } });
+    nodes.push({ id: geoId, label: geoLabel, type: 'geo', properties: { city: loc.city, region: loc.state, country: loc.country, ...(typeof loc.latitude === 'number' && typeof loc.longitude === 'number' ? { loc: `${loc.latitude},${loc.longitude}` } : {}), timezone: loc.timezone } });
     edges.push({ id: `edge_${ip}_geo`, from: ip, to: geoId, label: 'observed-at', properties: { source: 'ipaddressto' } });
   }
   if (asn.asn) {
