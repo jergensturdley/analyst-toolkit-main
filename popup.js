@@ -2079,6 +2079,7 @@ class SOCToolkit {
     if (category === 'ip') {
       links.push({ name: 'AbuseIPDB', url: `https://www.abuseipdb.com/check/${enc}` });
       links.push({ name: 'ipinfo', url: `https://ipinfo.io/${enc}` });
+      links.push({ name: 'IPAddress.to', url: `https://ipaddress.to/lookup/${enc}` });
       // Pulsedive for IPs
       links.push({ name: 'Pulsedive', url: `https://pulsedive.com/indicator/?ioc=${b64}` });
     }

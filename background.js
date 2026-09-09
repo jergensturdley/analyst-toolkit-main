@@ -1667,6 +1667,12 @@ function setupContextMenus() {
   });
 
   chrome.contextMenus.create({
+    id: 'lookup-ipaddressto',
+    title: 'Check in IPAddress.to',
+    contexts: ['selection']
+  });
+
+  chrome.contextMenus.create({
     id: 'lookup-mitre',
     title: 'Lookup MITRE ATT&CK',
     contexts: ['selection']
@@ -1829,7 +1835,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     case 'lookup-ipinfo':
       openIpInfoLookup(selectedText);
       break;
-      
+
+    case 'lookup-ipaddressto':
+      openIpAddressToLookup(selectedText);
+      break;
+
     case 'lookup-mitre':
       openMitreLookup(selectedText);
       break;
@@ -2072,6 +2082,12 @@ function openAbuseIPDBLookup(text) {
 function openIpInfoLookup(text) {
   const cleanText = text.trim();
   const url = `https://ipinfo.io/${encodeURIComponent(cleanText)}`;
+  chrome.tabs.create({ url });
+}
+
+function openIpAddressToLookup(text) {
+  const cleanText = text.trim();
+  const url = `https://ipaddress.to/lookup/${encodeURIComponent(cleanText)}`;
   chrome.tabs.create({ url });
 }
 
