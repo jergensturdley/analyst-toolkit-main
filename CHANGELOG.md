@@ -2,7 +2,7 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
-## [0.5.3] - Unreleased
+## [0.5.3] - 2026-09-09
 
 ### Added
 - IPAddress.to as a keyless IP enrichment source (geolocation, ASN, VPN/proxy/Tor flags, fraud score with AbuseIPDB as primary)
