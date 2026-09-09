@@ -857,7 +857,7 @@ class SOCToolkit {
       });
     });
 
-    const providerIds = ['ipinfo', 'abuseipdb', 'greynoise', 'virustotal', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
+    const providerIds = ['ipinfo', 'abuseipdb', 'greynoise', 'virustotal', 'ipaddressto', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
     chrome.storage.local.get(['enrichmentProviders'], (res) => {
       const saved = res.enrichmentProviders || {};
       providerIds.forEach((pid) => {
@@ -2079,6 +2079,7 @@ class SOCToolkit {
     if (category === 'ip') {
       links.push({ name: 'AbuseIPDB', url: `https://www.abuseipdb.com/check/${enc}` });
       links.push({ name: 'ipinfo', url: `https://ipinfo.io/${enc}` });
+      links.push({ name: 'IPAddress.to', url: `https://ipaddress.to/lookup/${enc}` });
       // Pulsedive for IPs
       links.push({ name: 'Pulsedive', url: `https://pulsedive.com/indicator/?ioc=${b64}` });
     }
@@ -3432,7 +3433,10 @@ class SOCToolkit {
         const dataLines = s.data ? Object.entries(s.data)
           .filter(([, v]) => v !== null && v !== undefined && v !== '')
           .slice(0, 6)
-          .map(([k, v]) => `<span><b>${this.escapeHtml(k)}:</b> ${typeof v === 'object' ? this.escapeHtml(JSON.stringify(v)) : this.escapeHtml(String(v).slice(0, 80))}</span>`)
+          .map(([k, v]) => {
+            const display = typeof v === 'object' ? JSON.stringify(v) : String(v);
+            return `<span class="source-data-line"><b>${this.escapeHtml(k)}:</b> ${this.escapeHtml(display.slice(0, 80))}<button class="source-copy-btn" data-copy="${this.escapeHtml(display)}" title="Copy value"><i class="fa-solid fa-copy"></i></button></span>`;
+          })
           .join('') : '';
         // Defense-in-depth: only render apiUrl if it is an https:// deep link, so a
         // future provider cannot accidentally turn the Source button into a
@@ -3475,6 +3479,19 @@ class SOCToolkit {
           if (!el) return;
           el.classList.toggle('open');
           btn.textContent = el.classList.contains('open') ? 'Hide JSON' : 'View JSON';
+        });
+      });
+
+      sourceCards.querySelectorAll('.source-copy-btn').forEach((btn) => {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const text = btn.getAttribute('data-copy') || '';
+          if (!text) return;
+          navigator.clipboard.writeText(text).then(() => {
+            this.showNotification('Copied to clipboard', 'success');
+          }).catch(() => {
+            this.showNotification('Copy failed', 'error');
+          });
         });
       });
     }

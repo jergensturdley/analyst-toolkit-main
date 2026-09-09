@@ -51,7 +51,8 @@ const RATE_LIMITS = {
   virustotal: { requests: 4, window: 60 * 1000, backoff: 15 * 60 * 1000 },
   urlscan: { requests: 100, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
   urlhaus: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
-  phishtank: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 }
+  phishtank: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
+  ipaddressto: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 }
 };
 
 const MAX_RATE_LIMIT_PROVIDERS = 1000;
@@ -319,7 +320,8 @@ async function runIpAgent(ip, options = {}) {
     isEnabled('ipinfo')    ? fetchIpInfo(ip, keys.ipinfoApiKey)              : Promise.resolve(null),
     isEnabled('abuseipdb') ? fetchAbuseIPDB(ip, keys.abuseipdbApiKey)        : Promise.resolve(null),
     isEnabled('greynoise') ? fetchGreyNoise(ip, keys.greynoiseApiKey)        : Promise.resolve(null),
-    isEnabled('virustotal')? fetchVirusTotalIp(ip, keys.virustotalApiKey)    : Promise.resolve(null)
+    isEnabled('virustotal')? fetchVirusTotalIp(ip, keys.virustotalApiKey)    : Promise.resolve(null),
+    isEnabled('ipaddressto') ? fetchIpAddressTo(ip)                            : Promise.resolve(null)
   ];
 
   const settledResults = await Promise.allSettled(tasks);
@@ -393,6 +395,20 @@ function buildIpSummary(sources) {
     }
   }
 
+  const ipto = sources.find((s) => s.provider === 'ipaddressto' && s.status === 'success');
+  if (ipto?.data) {
+    if (ipto.data.is_vpn === 'true') summary.tags.push('vpn');
+    if (ipto.data.is_proxy === 'true') summary.tags.push('proxy');
+    if (ipto.data.is_tor === 'true') summary.tags.push('tor');
+    // Fallback risk ONLY when AbuseIPDB contributed nothing
+    if (!abuse && ipto.data.fraud_score !== undefined) {
+      const fs = Number(ipto.data.fraud_score);
+      summary.riskScore = fs;
+      summary.confidence = Math.min(1, fs / 100);
+      summary.verdict = fs >= 75 ? 'malicious' : fs >= 40 ? 'suspicious' : 'clean';
+    }
+  }
+
   return summary;
 }
 
@@ -459,6 +475,51 @@ function buildDomainSummary(sources) {
   }
 
   return summary;
+}
+
+// Normalize IPAddress.to /api/lookup + /api/score payloads into the flat,
+// copy-friendly data shape used by enrichment source cards, plus graph
+// nodes/edges. Node/edge ids intentionally match fetchIpInfo's scheme
+// (geo_<ip>, asn_<num>, edge_<ip>_geo, edge_<ip>_asn) so dedupeById merges
+// across sources instead of duplicating geo/ASN nodes in the graph.
+function normalizeIpAddressTo(ip, lookup, score) {
+  const data = {};
+  const loc = (lookup && lookup.location) || {};
+  const asn = (lookup && lookup.asn) || {};
+  const company = (lookup && lookup.company) || {};
+  if (lookup && lookup.rdns) data.rdns = lookup.rdns;
+  if (loc.country) data.country = loc.country;
+  if (loc.country_code) data.country_code = loc.country_code;
+  if (loc.state) data.state = loc.state;
+  if (loc.city) data.city = loc.city;
+  if (typeof loc.latitude === 'number') data.latitude = String(loc.latitude);
+  if (typeof loc.longitude === 'number') data.longitude = String(loc.longitude);
+  if (loc.timezone) data.timezone = loc.timezone;
+  if (asn.asn) data.asn = `AS${asn.asn}`;
+  if (asn.org || asn.descr) data.as_org = asn.org || asn.descr;
+  if (company.name) data.isp = company.name;
+  if (company.type) data.company_type = company.type;
+  ['is_vpn', 'is_proxy', 'is_tor', 'is_hosting'].forEach((f) => {
+    if (lookup && typeof lookup[f] === 'boolean') data[f] = String(lookup[f]);
+  });
+  if (score && typeof score.score === 'number') data.fraud_score = String(score.score);
+  if (score && score.risk) data.fraud_risk = score.risk;
+
+  const nodes = [];
+  const edges = [];
+  const geoLabel = [loc.city, loc.state, loc.country].filter(Boolean).join(', ');
+  // Country alone is too coarse for a geo node — require city or state.
+  if ((loc.city || loc.state) && geoLabel) {
+    const geoId = `geo_${ip.replace(/[.:]/g, '_')}`;
+    nodes.push({ id: geoId, label: geoLabel, type: 'geo', properties: { city: loc.city, region: loc.state, country: loc.country, ...(typeof loc.latitude === 'number' && typeof loc.longitude === 'number' ? { loc: `${loc.latitude},${loc.longitude}` } : {}), timezone: loc.timezone } });
+    edges.push({ id: `edge_${ip}_geo`, from: ip, to: geoId, label: 'observed-at', properties: { source: 'ipaddressto' } });
+  }
+  if (asn.asn) {
+    const asnId = `asn_${asn.asn}`;
+    nodes.push({ id: asnId, label: `AS${asn.asn}`, type: 'asn', properties: { name: asn.descr, org: asn.org } });
+    edges.push({ id: `edge_${ip}_asn`, from: ip, to: asnId, label: 'belongs-to', properties: { source: 'ipaddressto' } });
+  }
+  return { data, nodes, edges };
 }
 
 async function fetchIpInfo(ip, apiKey) {
@@ -635,6 +696,57 @@ async function fetchGreyNoise(ip, apiKey) {
     };
   } catch (err) {
     return { provider: 'greynoise', displayName: 'GreyNoise', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+  }
+}
+
+async function fetchIpAddressTo(ip) {
+  try {
+    if (!rateLimiter.canMakeRequest('ipaddressto')) {
+      return {
+        provider: 'ipaddressto',
+        displayName: 'IPAddress.to',
+        status: 'error',
+        errorCode: 'RATE_LIMIT_EXCEEDED',
+        errorMessage: `Try again in ${Math.ceil(rateLimiter.timeUntilAvailable('ipaddressto') / 1000)}s`
+      };
+    }
+    const opts = { headers: { Accept: 'application/json', 'User-Agent': 'SOC-Analyst-Toolkit-Extension' } };
+    const [lookupRes, scoreRes] = await Promise.allSettled([
+      fetchWithBackoff(`https://ipaddress.to/api/lookup/${encodeURIComponent(ip)}`, opts),
+      fetchWithBackoff(`https://ipaddress.to/api/score/${encodeURIComponent(ip)}`, opts)
+    ]);
+    rateLimiter.recordRequest('ipaddressto');
+    if (lookupRes.status !== 'fulfilled' || !lookupRes.value.ok) {
+      return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: lookupRes.status === 'rejected' ? lookupRes.reason.message : `HTTP ${lookupRes.value.status}` };
+    }
+    const lookup = await lookupRes.value.json();
+    if (!lookup || lookup.success !== true) {
+      return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NO_DATA', errorMessage: (lookup && lookup.error) || 'Lookup returned no data' };
+    }
+    // Score endpoint failing alone degrades gracefully: card renders without fraud fields.
+    let score = null;
+    if (scoreRes.status === 'fulfilled' && scoreRes.value.ok) {
+      try {
+        const j = await scoreRes.value.json();
+        if (j && j.success === true) score = j;
+      } catch (e) { /* non-fatal */ }
+    }
+    const { data, nodes, edges } = normalizeIpAddressTo(ip, lookup, score);
+    return {
+      provider: 'ipaddressto',
+      displayName: 'IPAddress.to',
+      status: 'success',
+      cached: false,
+      data,
+      nodes,
+      edges,
+      // Website analysis page, not the raw API endpoint — the "Source" button
+      // in the enrichment panel renders this URL (https-only guarded).
+      apiUrl: `https://ipaddress.to/lookup/${encodeURIComponent(ip)}`,
+      metadata: { ttlSeconds: 24 * 60 * 60, fetchedAt: Date.now() }
+    };
+  } catch (err) {
+    return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 
@@ -1554,6 +1666,12 @@ function setupContextMenus() {
   });
 
   chrome.contextMenus.create({
+    id: 'lookup-ipaddressto',
+    title: 'Check in IPAddress.to',
+    contexts: ['selection']
+  });
+
+  chrome.contextMenus.create({
     id: 'lookup-mitre',
     title: 'Lookup MITRE ATT&CK',
     contexts: ['selection']
@@ -1716,7 +1834,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     case 'lookup-ipinfo':
       openIpInfoLookup(selectedText);
       break;
-      
+
+    case 'lookup-ipaddressto':
+      openIpAddressToLookup(selectedText);
+      break;
+
     case 'lookup-mitre':
       openMitreLookup(selectedText);
       break;
@@ -1959,6 +2081,12 @@ function openAbuseIPDBLookup(text) {
 function openIpInfoLookup(text) {
   const cleanText = text.trim();
   const url = `https://ipinfo.io/${encodeURIComponent(cleanText)}`;
+  chrome.tabs.create({ url });
+}
+
+function openIpAddressToLookup(text) {
+  const cleanText = text.trim();
+  const url = `https://ipaddress.to/lookup/${encodeURIComponent(cleanText)}`;
   chrome.tabs.create({ url });
 }
 

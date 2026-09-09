@@ -25,14 +25,14 @@ This extension provides a suite of tools to accelerate the investigation of secu
 
 ### OSINT Integration
 - **Comprehensive Threat Intelligence**: Quick lookup in 20+ OSINT platforms including:
-  - VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io
+  - VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, IPAddress.to
   - GreyNoise, Shodan (for IPs)
   - URLhaus, urlscan.io (for URLs/domains)
   - MalwareBazaar, Hybrid Analysis (for hashes)
   - MITRE ATT&CK, D3FEND (for techniques)
   - Blockchain explorers (for crypto addresses)
   - MAC vendor lookups
-- **Agent Enrichment**: Configurable IP enrichment (ipinfo.io, AbuseIPDB, GreyNoise, VirusTotal) with caching and rate limits, triggered from the IOC graph right-click menu.
+- **Agent Enrichment**: Configurable IP enrichment (ipinfo.io, IPAddress.to, AbuseIPDB, GreyNoise, VirusTotal) with caching and rate limits, triggered from the IOC graph right-click menu.
 - **Custom OSINT Sources**: Add your own internal tools and platforms
 - **Context Menu Integration**: Right-click any selected text for instant OSINT lookups
 

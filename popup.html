@@ -1505,6 +1505,12 @@
       padding: 0;
     }
     .enrichment-raw-toggle:hover { text-decoration: underline; }
+    .enrichment-source-card .source-data-line { display: inline-flex; align-items: center; gap: 4px; }
+    .enrichment-source-card .source-copy-btn {
+      background: none; border: none; cursor: pointer; padding: 0 2px;
+      color: var(--text-secondary); font-size: 10px; line-height: 1;
+    }
+    .enrichment-source-card .source-copy-btn:hover { color: var(--text-primary); }
     .enrichment-raw-json {
       display: none;
       margin-top: 6px;
@@ -2366,6 +2372,7 @@
           <label><input type="checkbox" id="providerToggle_ipinfo" checked> ipinfo.io</label>
           <label><input type="checkbox" id="providerToggle_abuseipdb" checked> AbuseIPDB</label>
           <label><input type="checkbox" id="providerToggle_greynoise" checked> GreyNoise</label>
+          <label><input type="checkbox" id="providerToggle_ipaddressto" checked> IPAddress.to</label>
           <label><input type="checkbox" id="providerToggle_urlscan" checked> urlscan.io</label>
           <label><input type="checkbox" id="providerToggle_malwarebazaar" checked> MalwareBazaar</label>
           <label><input type="checkbox" id="providerToggle_urlhaus" checked> URLhaus</label>
