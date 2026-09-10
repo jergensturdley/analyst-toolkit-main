@@ -238,12 +238,17 @@ class SOCToolkit {
         completed++;
         if (!res || res.status === 'error') {
           failed++;
-        } else if (res.nodes || res.edges) {
-          let nodeId = null;
-          if (this.graphNodes) {
-            this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === val) nodeId = n.id; });
+        } else {
+          if (res.nodes || res.edges) {
+            let nodeId = null;
+            if (this.graphNodes) {
+              this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === val) nodeId = n.id; });
+            }
+            if (nodeId) this.applyAgentResultToGraph(res, nodeId, val);
           }
-          if (nodeId) this.applyAgentResultToGraph(res, nodeId, val);
+          // Single-IOC batch runs are effectively a manual enrichment — show the
+          // detail panel so the source data isn't only visible in the graph.
+          if (total === 1) this.showEnrichmentPanel(res);
         }
         
         if (completed === total) {
@@ -3003,23 +3008,30 @@ class SOCToolkit {
       }
     });
 
-    // Right-click (button===2) handler to show a small context menu for nodes
+    // Right-click handler to show a small context menu for nodes.
+    // vis-network emits `oncontext` for right-clicks (its `click` event only
+    // fires for button 0), and the native contextmenu must be preventDefault'ed
+    // or the OS menu wins. For `oncontext`, params.event IS the native event
+    // (no .srcEvent — that only exists on hammer-wrapped events), params.nodes
+    // holds the current selection (not the node under the pointer), and
+    // params.pointer.DOM is the documented getNodeAt() input.
     this._removeGraphContextIfExists = () => {
       const existing = document.getElementById('graphNodeContextMenu');
       if (existing && existing.parentElement) existing.parentElement.removeChild(existing);
     };
 
-    this.iocGraph.on('click', (params) => {
+    this.iocGraph.on('oncontext', (params) => {
       try {
-        // Detect right-click via srcEvent.button === 2
-        const ev = params.event && params.event.srcEvent;
-        if (!ev || ev.button !== 2) return;
+        const ev = params.event;
+        if (!ev || ev.type !== 'contextmenu') return;
+        ev.preventDefault();
 
         // Remove any existing menu first
         this._removeGraphContextIfExists();
 
-        if (!(params.nodes && params.nodes.length)) return;
-        const nodeId = params.nodes[0];
+        if (!params.pointer || !params.pointer.DOM) return;
+        const nodeId = this.iocGraph.getNodeAt(params.pointer.DOM);
+        if (!nodeId) return;
         const node = this.graphNodes.get(nodeId);
         if (!node) return;
 
