@@ -20,8 +20,6 @@
     "https://api.abuseipdb.com/*",
     "https://ipaddress.to/*",
     "https://ipinfo.io/*",
-    "https://api.greynoise.io/*",
-    "https://viz.greynoise.com/*",
     "https://urlscan.io/*",
     "https://urlhaus-api.abuse.ch/*",
     "https://urlhaus.abuse.ch/*",

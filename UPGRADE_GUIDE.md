@@ -49,7 +49,6 @@ This major update brings powerful new capabilities to enhance your security anal
 2. **ThreatFox** - IOC sharing platform (abuse.ch)
 3. **MalwareBazaar** - Malware sample repository
 4. **Hybrid Analysis** - Sandbox analysis platform
-5. **GreyNoise** - Internet noise classification
 6. **Shodan** - Internet-connected device search
 
 ### What This Means

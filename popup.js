@@ -331,7 +331,7 @@ class SOCToolkit {
       } else {
         title.textContent = 'Enrich IOCs using third-party services?';
         body.innerHTML = [
-          '<p>Enrichment will send the selected IOC to the third-party providers enabled in Settings (e.g. VirusTotal, AbuseIPDB, ipinfo, GreyNoise, urlscan, MalwareBazaar). Each enabled provider returns data that the extension renders into the popup graph.</p>',
+          '<p>Enrichment will send the selected IOC to the third-party providers enabled in Settings (e.g. VirusTotal, AbuseIPDB, ipinfo, urlscan, MalwareBazaar). Each enabled provider returns data that the extension renders into the popup graph.</p>',
           '<p>No API keys are uploaded &mdash; they are configured locally and used only in your browser to call those services.</p>',
           '<p>You can disable specific providers in Settings &gt; Enrichment Providers.</p>'
         ].join('');
@@ -691,7 +691,6 @@ class SOCToolkit {
     const ipEnrichmentApiInputs = [
       { id: 'ipinfoApiKey', storageKey: 'ipinfoApiKey', label: 'ipinfo token' },
       { id: 'abuseipdbApiKey', storageKey: 'abuseipdbApiKey', label: 'AbuseIPDB key' },
-      { id: 'greynoiseApiKey', storageKey: 'greynoiseApiKey', label: 'GreyNoise key' },
       { id: 'urlscanApiKey', storageKey: 'urlscanApiKey', label: 'urlscan.io key' }
     ];
     ipEnrichmentApiInputs.forEach((entry) => {
@@ -862,7 +861,7 @@ class SOCToolkit {
       });
     });
 
-    const providerIds = ['ipinfo', 'abuseipdb', 'greynoise', 'virustotal', 'ipaddressto', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
+    const providerIds = ['ipinfo', 'abuseipdb', 'virustotal', 'ipaddressto', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
     chrome.storage.local.get(['enrichmentProviders'], (res) => {
       const saved = res.enrichmentProviders || {};
       providerIds.forEach((pid) => {
@@ -1556,7 +1555,7 @@ class SOCToolkit {
   async loadSettings() {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'greynoiseApiKey', 'urlscanApiKey'], (res) => {
+        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'urlscanApiKey'], (res) => {
           const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc' };
           const s = res.socSettings || defaults;
           this.autoAnalyze = s.autoAnalyze ?? true;
@@ -1588,8 +1587,6 @@ class SOCToolkit {
           if (ipinfoInput && res.ipinfoApiKey) ipinfoInput.value = res.ipinfoApiKey;
           const abuseInput = document.getElementById('abuseipdbApiKey');
           if (abuseInput && res.abuseipdbApiKey) abuseInput.value = res.abuseipdbApiKey;
-          const greynoiseInput = document.getElementById('greynoiseApiKey');
-          if (greynoiseInput && res.greynoiseApiKey) greynoiseInput.value = res.greynoiseApiKey;
           const urlscanInput = document.getElementById('urlscanApiKey');
           if (urlscanInput && res.urlscanApiKey) urlscanInput.value = res.urlscanApiKey;
 
@@ -2108,9 +2105,7 @@ class SOCToolkit {
     if (category === 'url') {
       links.push({ name: 'URLhaus', url: `https://urlhaus.abuse.ch/browse.php?search=${enc}` });
     }
-    // IPs: Add GreyNoise
     if (category === 'ip') {
-      links.push({ name: 'GreyNoise', url: `https://viz.greynoise.com/ip/${enc}` });
       links.push({ name: 'Shodan', url: `https://www.shodan.io/host/${enc}` });
     }
 
@@ -2652,7 +2647,6 @@ class SOCToolkit {
       { v: 'urlscan', t: 'urlscan' },
       { v: 'AbuseIPDB', t: 'AbuseIPDB' },
       { v: 'Pulsedive', t: 'Pulsedive' },
-      { v: 'GreyNoise', t: 'GreyNoise' },
       { v: 'Shodan', t: 'Shodan' },
       { v: 'ThreatFox', t: 'ThreatFox' },
       { v: 'MalwareBazaar', t: 'MalwareBazaar' },

@@ -47,7 +47,6 @@ const CACHE_TTL = {
 const RATE_LIMITS = {
   abuseipdb: { requests: 1000, window: 24 * 60 * 60 * 1000, backoff: 5 * 60 * 1000 },
   ipinfo: { requests: 50000, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
-  greynoise: { requests: 100, window: 24 * 60 * 60 * 1000, backoff: 5 * 60 * 1000 },
   virustotal: { requests: 4, window: 60 * 1000, backoff: 15 * 60 * 1000 },
   urlscan: { requests: 100, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
   urlhaus: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
@@ -309,7 +308,7 @@ async function getEnabledProviders() {
 async function runIpAgent(ip, options = {}) {
   const [keys, providerPrefs] = await Promise.all([
     new Promise((resolve) =>
-      chrome.storage.local.get(['ipinfoApiKey', 'abuseipdbApiKey', 'greynoiseApiKey', 'virustotalApiKey'], resolve)
+      chrome.storage.local.get(['ipinfoApiKey', 'abuseipdbApiKey', 'virustotalApiKey'], resolve)
     ),
     getEnabledProviders()
   ]);
@@ -319,7 +318,6 @@ async function runIpAgent(ip, options = {}) {
   const tasks = [
     isEnabled('ipinfo')    ? fetchIpInfo(ip, keys.ipinfoApiKey)              : Promise.resolve(null),
     isEnabled('abuseipdb') ? fetchAbuseIPDB(ip, keys.abuseipdbApiKey)        : Promise.resolve(null),
-    isEnabled('greynoise') ? fetchGreyNoise(ip, keys.greynoiseApiKey)        : Promise.resolve(null),
     isEnabled('virustotal')? fetchVirusTotalIp(ip, keys.virustotalApiKey)    : Promise.resolve(null),
     isEnabled('ipaddressto') ? fetchIpAddressTo(ip)                            : Promise.resolve(null)
   ];
@@ -357,21 +355,10 @@ async function runIpAgent(ip, options = {}) {
 function buildIpSummary(sources) {
   const summary = { verdict: 'unknown', confidence: 0, tags: [], riskScore: 0 };
   const abuse = sources.find((s) => s.provider === 'abuseipdb' && s.status === 'success');
-  const greynoise = sources.find((s) => s.provider === 'greynoise' && s.status === 'success');
-
   if (abuse?.data?.abuseConfidenceScore !== undefined) {
     summary.riskScore = abuse.data.abuseConfidenceScore;
     summary.confidence = Math.min(1, abuse.data.abuseConfidenceScore / 100);
     summary.verdict = abuse.data.abuseConfidenceScore >= 75 ? 'malicious' : abuse.data.abuseConfidenceScore >= 40 ? 'suspicious' : 'clean';
-  }
-
-  if (greynoise?.data?.classification) {
-    summary.tags.push(greynoise.data.classification);
-    if (greynoise.data.name) summary.tags.push(greynoise.data.name);
-    if (summary.riskScore < 50 && greynoise.data.classification === 'malicious') {
-      summary.riskScore = 75;
-      summary.verdict = 'malicious';
-    }
   }
 
   const vt = sources.find((s) => s.provider === 'virustotal' && s.status === 'success');
@@ -652,52 +639,6 @@ async function fetchAbuseIPDB(ip, apiKey) {
   }
 }
 
-async function fetchGreyNoise(ip, apiKey) {
-  if (!apiKey) {
-    return { provider: 'greynoise', displayName: 'GreyNoise', status: 'error', errorCode: 'API_KEY_MISSING', errorMessage: 'GreyNoise API key not set' };
-  }
-  try {
-    if (!rateLimiter.canMakeRequest('greynoise')) {
-      return {
-        provider: 'greynoise',
-        displayName: 'GreyNoise',
-        status: 'error',
-        errorCode: 'RATE_LIMIT_EXCEEDED',
-        errorMessage: `Try again in ${Math.ceil(rateLimiter.timeUntilAvailable('greynoise') / 1000)}s`
-      };
-    }
-    const url = `https://api.greynoise.io/v3/community/${encodeURIComponent(ip)}`;
-    const resp = await fetchWithBackoff(url, { headers: { key: apiKey, Accept: 'application/json' } });
-    rateLimiter.recordRequest('greynoise');
-    if (!resp.ok) {
-      return { provider: 'greynoise', displayName: 'GreyNoise', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${resp.status}` };
-    }
-    const data = await resp.json();
-    const nodes = [];
-    const edges = [];
-    const gnId = `gn_${ip.replace(/[.:]/g, '_')}`;
-    nodes.push({
-      id: gnId,
-      label: data.classification ? `GreyNoise: ${data.classification}` : 'GreyNoise',
-      type: 'classification',
-      properties: { name: data.name, classification: data.classification, last_seen: data.last_seen, noise: data.noise }
-    });
-    edges.push({ id: `edge_${ip}_gn`, from: ip, to: gnId, label: 'classification', properties: { source: 'greynoise' } });
-    return {
-      provider: 'greynoise',
-      displayName: 'GreyNoise',
-      status: 'success',
-      cached: false,
-      data,
-      nodes,
-      edges,
-      apiUrl: url,
-      metadata: { ttlSeconds: 24 * 60 * 60, fetchedAt: Date.now() }
-    };
-  } catch (err) {
-    return { provider: 'greynoise', displayName: 'GreyNoise', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
-  }
-}
 
 async function fetchIpAddressTo(ip) {
   try {

@@ -4,6 +4,9 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
 ## [0.5.3] - 2026-09-09
 
+### Removed
+- GreyNoise enrichment source and OSINT link (service discontinued / site unresolvable)
+
 ### Added
 - IPAddress.to as a keyless IP enrichment source (geolocation, ASN, VPN/proxy/Tor flags, fraud score with AbuseIPDB as primary)
 - IPAddress.to OSINT link + right-click "Check in IPAddress.to" lookup

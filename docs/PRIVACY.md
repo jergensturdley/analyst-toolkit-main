@@ -14,7 +14,7 @@ The optional Paste button uses clipboard-read access only after you click it, to
 
 ## Network usage
 
-Outbound HTTP requests only occur when you click an OSINT lookup link or run an enrichment agent. Requests go to the providers configured in Settings (default: VirusTotal, ipinfo.io, AbuseIPDB, GreyNoise, IPAddress.to). Ask AI is a clipboard-copy helper: it builds a triage prompt and copies it to your clipboard so you can paste it into the AI chat of your choice; the extension itself does not contact any AI provider. The extension never makes network requests without a user action.
+Outbound HTTP requests only occur when you click an OSINT lookup link or run an enrichment agent. Requests go to the providers configured in Settings (default: VirusTotal, ipinfo.io, AbuseIPDB, IPAddress.to). Ask AI is a clipboard-copy helper: it builds a triage prompt and copies it to your clipboard so you can paste it into the AI chat of your choice; the extension itself does not contact any AI provider. The extension never makes network requests without a user action.
 
 ## Third-party access
 
