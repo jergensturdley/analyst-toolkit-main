@@ -23,7 +23,7 @@ SOC Analyst Toolkit is a free, privacy-first browser extension for security oper
 - Deduplication and sorting with one click.
 
 **OSINT Integration**
-- One-click lookup links to 20+ threat intelligence platforms: VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, GreyNoise, Shodan, URLhaus, urlscan.io, NVD, MITRE ATT&CK, and more.
+- One-click lookup links to 20+ threat intelligence platforms: VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, IPAddress.to, GreyNoise, Shodan, URLhaus, urlscan.io, NVD, MITRE ATT&CK, and more.
 - Group IOCs by type and open all lookups in a single tab group.
 - Custom OSINT entries in Settings — add your internal threat intel sources.
 
@@ -137,7 +137,7 @@ Used only when you click Copy to place defanged IOCs, triage prompts, or exporte
 Adds right-click context menu entries ("Lookup in VirusTotal", "Lookup in AbuseIPDB", etc.) for fast OSINT pivoting. The menu items appear only when you right-click while the extension is active.
 
 **Host Permission (OSINT lookups)**
-Opens OSINT lookup links in new tabs when you click them. Each domain is listed explicitly: `https://www.virustotal.com/*`, `https://www.abuseipdb.com/*`, `https://ipinfo.io/*`, `https://api.greynoise.io/*`, `https://urlscan.io/*`, `https://urlhaus.abuse.ch/*`, `https://otx.alienvault.com/*`, `https://attack.mitre.org/*`, `https://nvd.nist.gov/*`, `https://cve.mitre.org/*`, `https://cyberchef.org/*`, and similar. No `<all_urls>` permission is used. Custom user-added URLs open as normal browser tabs with no special permission.
+Opens OSINT lookup links in new tabs when you click them. Each domain is listed explicitly: `https://www.virustotal.com/*`, `https://www.abuseipdb.com/*`, `https://ipaddress.to/*`, `https://ipinfo.io/*`, `https://api.greynoise.io/*`, `https://urlscan.io/*`, `https://urlhaus.abuse.ch/*`, `https://otx.alienvault.com/*`, `https://attack.mitre.org/*`, `https://nvd.nist.gov/*`, `https://cve.mitre.org/*`, `https://cyberchef.org/*`, and similar. No `<all_urls>` permission is used. Custom user-added URLs open as normal browser tabs with no special permission.
 
 **notifications**
 Displays a brief in-browser success confirmation when IOC data is copied to your clipboard. No push notifications, no background alerts.
