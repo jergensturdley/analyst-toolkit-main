@@ -133,7 +133,9 @@ async function fetchWithBackoff(url, options = {}, maxRetries = 3) {
 }
 
 async function getCachedAgentResult(agentId, iocType, ioc) {
-  const cacheKey = `agent_${agentId}_${iocType}_${ioc}`;
+  // v2 prefix: invalidates caches written before provider changes (e.g. the
+  // GreyNoise removal) so stale sources/cards are never re-served.
+  const cacheKey = `agent2_${agentId}_${iocType}_${ioc}`;
   const stored = await new Promise((resolve) => chrome.storage.local.get([cacheKey], resolve));
   const cached = stored[cacheKey];
   if (!cached) return null;
@@ -150,7 +152,7 @@ async function getCachedAgentResult(agentId, iocType, ioc) {
 }
 
 async function setCachedAgentResult(agentId, iocType, ioc, result) {
-  const cacheKey = `agent_${agentId}_${iocType}_${ioc}`;
+  const cacheKey = `agent2_${agentId}_${iocType}_${ioc}`;
   const payload = { ...result, timestamp: result.timestamp || Date.now() };
   await new Promise((resolve) => chrome.storage.local.set({ [cacheKey]: payload }, resolve));
 }

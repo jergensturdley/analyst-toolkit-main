@@ -1270,11 +1270,11 @@ class SOCToolkit {
     await this.saveNotes(filteredNotes);
 
     // 2. Prune stale caches. The button says "clear all data older than N days",
-    // so also sweep enrichment (agent_*), passive-DNS (pdns_cache_*) and ASN
+    // so also sweep enrichment (agent2_*, legacy agent_*), passive-DNS (pdns_cache_*) and ASN
     // (asn_cache_*) entries — each stores a numeric .timestamp.
     const all = await new Promise(resolve => chrome.storage.local.get(null, resolve));
     const staleKeys = Object.keys(all || {}).filter(k => {
-      if (!/^(agent_|pdns_cache_|asn_cache_)/.test(k)) return false;
+      if (!/^(agent2?_|pdns_cache_|asn_cache_)/.test(k)) return false;
       const ts = all[k] && all[k].timestamp;
       return typeof ts === 'number' && ts < cutoff;
     });
