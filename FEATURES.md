@@ -41,7 +41,6 @@
 ### IP Address Analysis
 - **AbuseIPDB**: IP abuse reporting and checking
 - **ipinfo.io**: IP geolocation and ASN information
-- **GreyNoise**: IP noise classification (NEW)
 - **Shodan**: Internet device search engine (NEW)
 
 ### URL & Domain Analysis

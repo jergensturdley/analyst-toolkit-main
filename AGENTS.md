@@ -52,9 +52,9 @@ Define safe, auditable, user-initiated enrichment of IOCs (IPs, domains, URLs, h
 ## Agent Overview by IOC Type
 
 ### IP Agent
-**Tasks**: Geolocation, ASN, abuse score, Shodan/Censys data, GreyNoise, open ports, historical observed ports, passive DNS mapping.
+**Tasks**: Geolocation, ASN, abuse score, Shodan/Censys data, open ports, historical observed ports, passive DNS mapping.
 
-**Primary Sources**: VirusTotal (when API key present), AbuseIPDB, GreyNoise, Shodan, Censys, ipinfo.io (no-key fallback).
+**Primary Sources**: VirusTotal (when API key present), AbuseIPDB, Shodan, Censys, ipinfo.io, IPAddress.to (no-key).
 
 **Output**: ASN node, geo node, abuse score node, optional Shodan device node(s), edges: `observed-at`, `belongs-to`, `reported-by`.
 
@@ -128,7 +128,6 @@ const agentsRegistry = {
     name: 'IP Reputation',
     supportedTypes: ['ip', 'ipv4', 'ipv6'],
     requiredApiKeys: ['abuseipdb'],
-    optionalApiKeys: ['greynoise'],
     rateLimitBudget: { requests: 1000, window: 86400000 }, // 1k/day
     uiLabel: 'Enrich with Reputation Data',
     run: async (ioc, options) => { /* implementation */ }
@@ -725,7 +724,6 @@ Lists available agents for that IOC type and optionally the provider:
 Right-click on IP node → Enrich
   → Enrich with Geolocation (ipinfo.io)
   → Enrich with Reputation (AbuseIPDB)
-  → Enrich with Classification (GreyNoise)
   → Enrich with All IP Sources
 ```
 
@@ -1046,7 +1044,7 @@ For any API keys in CI:
 ### Short-Term Priorities
 
 1. **IP Agent (Geo, ASN, AbuseIPDB)** — ⭐ **HIGH PRIORITY**
-   - Implement background handlers for ipinfo.io, AbuseIPDB, GreyNoise
+   - Implement background handlers for ipinfo.io, AbuseIPDB
    - Build graph merge UI
    - Add Settings section for API keys
    - **Rationale**: Most common IOC type, immediate value
@@ -1161,7 +1159,6 @@ Each agent follows a consistent implementation pattern. Use these specifications
 | **ipinfo.io** | Geo, ASN, ISP, org | Optional (free tier) | 50k/month | Free | Primary |
 | **IPAddress.to** | Geo, ASN, rDNS, company, VPN/proxy/Tor flags, fraud score | No | Fair use (500/day in extension) | Free | Primary |
 | **AbuseIPDB** | Abuse reports, confidence score | Yes | 1k/day | Free | High |
-| **GreyNoise** | Noise classification, tags | Yes (community) | 100/day | Free | High |
 | **VirusTotal** | Passive DNS, ASN, prefix, registry | Yes | 4/min | Free | Medium |
 | **Shodan** | Open ports, banners, services | Yes | 100/month | $49/mo | Optional |
 | **Censys** | Certificate data, services | Yes | 250/day | Free | Optional |
@@ -1188,11 +1185,6 @@ Each agent follows a consistent implementation pattern. Use these specifications
     - Header: `Key: {apiKey}`, `Accept: application/json`
     - Parse: abuseConfidenceScore, usageType, totalReports, lastReportedAt
     - Note: Requires API key
-  - [ ] Implement `fetchGreyNoise()` for GreyNoise Community
-    - Endpoint: `https://api.greynoise.io/v3/community/{ip}`
-    - Header: `key: {apiKey}`
-    - Parse: classification, name, link, riot (benign internet scanner), noise
-    - Note: Free community tier available
   - [ ] Implement `fetchVirusTotalIP()` for passive DNS and ASN
     - Endpoint: `https://www.virustotal.com/api/v3/ip_addresses/{ip}`
     - Header: `x-apikey: {apiKey}`
@@ -1206,7 +1198,7 @@ Each agent follows a consistent implementation pattern. Use these specifications
 - [ ] **3. Result Aggregation**
   - [ ] Combine results into normalized format
   - [ ] Calculate aggregate risk score (0-100)
-    - Weight: AbuseIPDB confidence (50%), GreyNoise classification (30%), ISP type (20%)
+    - Weight: AbuseIPDB confidence, IPAddress.to flags/fraud score, ISP type
   - [ ] Determine verdict: `clean`, `suspicious`, `malicious`, `unknown`
   - [ ] Generate tags: e.g., `["scanner", "datacenter", "china"]`
 
@@ -1229,7 +1221,7 @@ Each agent follows a consistent implementation pattern. Use these specifications
 
 - [ ] **7. Settings UI**
   - [ ] Add "IP Enrichment" section to Settings tab
-  - [ ] API key inputs for ipinfo.io, AbuseIPDB, GreyNoise, VirusTotal
+  - [ ] API key inputs for ipinfo.io, AbuseIPDB, VirusTotal
   - [ ] Enable/disable toggles for each source
   - [ ] Rate limit status display
   - [ ] "Test Connection" button for each source
@@ -1528,7 +1520,7 @@ Each agent follows a consistent implementation pattern. Use these specifications
 
 1. **Immediate**: Implement **IP Agent** (top priority)
    - Start with ipinfo.io and AbuseIPDB (most accessible APIs)
-   - Add GreyNoise and VirusTotal after core functionality works
+   - Add VirusTotal after core functionality works
    
 2. **After IP Agent**: Implement **Hash Agent** (high value, simpler than Domain Agent)
    
@@ -1553,7 +1545,6 @@ Each agent follows a consistent implementation pattern. Use these specifications
 ### IP Enrichment
 - **VirusTotal**: https://developers.virustotal.com/reference/ip-info
 - **AbuseIPDB**: https://www.abuseipdb.com/api
-- **GreyNoise**: https://docs.greynoise.io/reference/get_v3-community-ip
 - **ipinfo.io**: https://ipinfo.io/developers
 - **IPAddress.to**: https://ipaddress.to/api/docs/
 - **Shodan**: https://developer.shodan.io/api

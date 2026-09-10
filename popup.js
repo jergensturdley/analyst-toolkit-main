@@ -238,12 +238,17 @@ class SOCToolkit {
         completed++;
         if (!res || res.status === 'error') {
           failed++;
-        } else if (res.nodes || res.edges) {
-          let nodeId = null;
-          if (this.graphNodes) {
-            this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === val) nodeId = n.id; });
+        } else {
+          if (res.nodes || res.edges) {
+            let nodeId = null;
+            if (this.graphNodes) {
+              this.graphNodes.forEach((n) => { if (this.getNodeValue(n) === val) nodeId = n.id; });
+            }
+            if (nodeId) this.applyAgentResultToGraph(res, nodeId, val);
           }
-          if (nodeId) this.applyAgentResultToGraph(res, nodeId, val);
+          // Single-IOC batch runs are effectively a manual enrichment — show the
+          // detail panel so the source data isn't only visible in the graph.
+          if (total === 1) this.showEnrichmentPanel(res);
         }
         
         if (completed === total) {
@@ -326,7 +331,7 @@ class SOCToolkit {
       } else {
         title.textContent = 'Enrich IOCs using third-party services?';
         body.innerHTML = [
-          '<p>Enrichment will send the selected IOC to the third-party providers enabled in Settings (e.g. VirusTotal, AbuseIPDB, ipinfo, GreyNoise, urlscan, MalwareBazaar). Each enabled provider returns data that the extension renders into the popup graph.</p>',
+          '<p>Enrichment will send the selected IOC to the third-party providers enabled in Settings (e.g. VirusTotal, AbuseIPDB, ipinfo, urlscan, MalwareBazaar). Each enabled provider returns data that the extension renders into the popup graph.</p>',
           '<p>No API keys are uploaded &mdash; they are configured locally and used only in your browser to call those services.</p>',
           '<p>You can disable specific providers in Settings &gt; Enrichment Providers.</p>'
         ].join('');
@@ -686,7 +691,6 @@ class SOCToolkit {
     const ipEnrichmentApiInputs = [
       { id: 'ipinfoApiKey', storageKey: 'ipinfoApiKey', label: 'ipinfo token' },
       { id: 'abuseipdbApiKey', storageKey: 'abuseipdbApiKey', label: 'AbuseIPDB key' },
-      { id: 'greynoiseApiKey', storageKey: 'greynoiseApiKey', label: 'GreyNoise key' },
       { id: 'urlscanApiKey', storageKey: 'urlscanApiKey', label: 'urlscan.io key' }
     ];
     ipEnrichmentApiInputs.forEach((entry) => {
@@ -857,7 +861,7 @@ class SOCToolkit {
       });
     });
 
-    const providerIds = ['ipinfo', 'abuseipdb', 'greynoise', 'virustotal', 'ipaddressto', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
+    const providerIds = ['ipinfo', 'abuseipdb', 'virustotal', 'ipaddressto', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
     chrome.storage.local.get(['enrichmentProviders'], (res) => {
       const saved = res.enrichmentProviders || {};
       providerIds.forEach((pid) => {
@@ -1266,11 +1270,11 @@ class SOCToolkit {
     await this.saveNotes(filteredNotes);
 
     // 2. Prune stale caches. The button says "clear all data older than N days",
-    // so also sweep enrichment (agent_*), passive-DNS (pdns_cache_*) and ASN
+    // so also sweep enrichment (agent2_*, legacy agent_*), passive-DNS (pdns_cache_*) and ASN
     // (asn_cache_*) entries — each stores a numeric .timestamp.
     const all = await new Promise(resolve => chrome.storage.local.get(null, resolve));
     const staleKeys = Object.keys(all || {}).filter(k => {
-      if (!/^(agent_|pdns_cache_|asn_cache_)/.test(k)) return false;
+      if (!/^(agent2?_|pdns_cache_|asn_cache_)/.test(k)) return false;
       const ts = all[k] && all[k].timestamp;
       return typeof ts === 'number' && ts < cutoff;
     });
@@ -1551,7 +1555,7 @@ class SOCToolkit {
   async loadSettings() {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'greynoiseApiKey', 'urlscanApiKey'], (res) => {
+        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'urlscanApiKey'], (res) => {
           const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc' };
           const s = res.socSettings || defaults;
           this.autoAnalyze = s.autoAnalyze ?? true;
@@ -1583,8 +1587,6 @@ class SOCToolkit {
           if (ipinfoInput && res.ipinfoApiKey) ipinfoInput.value = res.ipinfoApiKey;
           const abuseInput = document.getElementById('abuseipdbApiKey');
           if (abuseInput && res.abuseipdbApiKey) abuseInput.value = res.abuseipdbApiKey;
-          const greynoiseInput = document.getElementById('greynoiseApiKey');
-          if (greynoiseInput && res.greynoiseApiKey) greynoiseInput.value = res.greynoiseApiKey;
           const urlscanInput = document.getElementById('urlscanApiKey');
           if (urlscanInput && res.urlscanApiKey) urlscanInput.value = res.urlscanApiKey;
 
@@ -2103,9 +2105,7 @@ class SOCToolkit {
     if (category === 'url') {
       links.push({ name: 'URLhaus', url: `https://urlhaus.abuse.ch/browse.php?search=${enc}` });
     }
-    // IPs: Add GreyNoise
     if (category === 'ip') {
-      links.push({ name: 'GreyNoise', url: `https://viz.greynoise.com/ip/${enc}` });
       links.push({ name: 'Shodan', url: `https://www.shodan.io/host/${enc}` });
     }
 
@@ -2647,7 +2647,6 @@ class SOCToolkit {
       { v: 'urlscan', t: 'urlscan' },
       { v: 'AbuseIPDB', t: 'AbuseIPDB' },
       { v: 'Pulsedive', t: 'Pulsedive' },
-      { v: 'GreyNoise', t: 'GreyNoise' },
       { v: 'Shodan', t: 'Shodan' },
       { v: 'ThreatFox', t: 'ThreatFox' },
       { v: 'MalwareBazaar', t: 'MalwareBazaar' },
@@ -3003,23 +3002,30 @@ class SOCToolkit {
       }
     });
 
-    // Right-click (button===2) handler to show a small context menu for nodes
+    // Right-click handler to show a small context menu for nodes.
+    // vis-network emits `oncontext` for right-clicks (its `click` event only
+    // fires for button 0), and the native contextmenu must be preventDefault'ed
+    // or the OS menu wins. For `oncontext`, params.event IS the native event
+    // (no .srcEvent — that only exists on hammer-wrapped events), params.nodes
+    // holds the current selection (not the node under the pointer), and
+    // params.pointer.DOM is the documented getNodeAt() input.
     this._removeGraphContextIfExists = () => {
       const existing = document.getElementById('graphNodeContextMenu');
       if (existing && existing.parentElement) existing.parentElement.removeChild(existing);
     };
 
-    this.iocGraph.on('click', (params) => {
+    this.iocGraph.on('oncontext', (params) => {
       try {
-        // Detect right-click via srcEvent.button === 2
-        const ev = params.event && params.event.srcEvent;
-        if (!ev || ev.button !== 2) return;
+        const ev = params.event;
+        if (!ev || ev.type !== 'contextmenu') return;
+        ev.preventDefault();
 
         // Remove any existing menu first
         this._removeGraphContextIfExists();
 
-        if (!(params.nodes && params.nodes.length)) return;
-        const nodeId = params.nodes[0];
+        if (!params.pointer || !params.pointer.DOM) return;
+        const nodeId = this.iocGraph.getNodeAt(params.pointer.DOM);
+        if (!nodeId) return;
         const node = this.graphNodes.get(nodeId);
         if (!node) return;
 
