@@ -95,6 +95,9 @@ class SOCToolkit {
     this.iocGraph = null;
     this.currentTheme = 'arc'; // Default theme
     this.tlds = new Set();
+    this.autoEnrich = false;
+    this.enrichmentByIoc = new Map();   // value -> { type, result }
+    this._enrichmentRemainder = {};     // type -> value[] held back by the cap
     // Cache for debounce timeouts
     this._debounceTimers = {};
     // Cache for OSINT links to avoid regenerating
@@ -231,6 +234,19 @@ class SOCToolkit {
     }
     return groups;
   }
+
+  _autoEnrichResults(iocs) {
+    const groups = this.groupEnrichableByType(iocs);
+    this._enrichmentRemainder = {};
+    Object.entries(groups).forEach(([type, values]) => {
+      const { queued, remainder } = this.splitEnrichmentCap(values, AUTO_ENRICH_CAP);
+      if (remainder.length) this._enrichmentRemainder[type] = remainder;
+      if (queued.length) this._batchEnrich(type, queued);
+    });
+    this._refreshEnrichRemainingItem();
+  }
+
+  _refreshEnrichRemainingItem() {} // implemented in Task 3
 
   // Helper for batch enrichment with a single tracking notification
   async _batchEnrich(type, values) {
@@ -442,6 +458,15 @@ class SOCToolkit {
       autoAnalyzeToggle.checked = this.autoAnalyze;
       autoAnalyzeToggle.addEventListener('change', (e) => {
         this.autoAnalyze = e.target.checked;
+        this.saveSettings();
+      });
+    }
+
+    const autoEnrichToggle = document.getElementById('autoEnrichToggle');
+    if (autoEnrichToggle) {
+      autoEnrichToggle.checked = this.autoEnrich;
+      autoEnrichToggle.addEventListener('change', (e) => {
+        this.autoEnrich = e.target.checked;
         this.saveSettings();
       });
     }
@@ -977,6 +1002,9 @@ class SOCToolkit {
     this.lastIOCs = iocs;
     this.lastIOCInput = input;
     this.displayIOCResults(iocs);
+    if (this.autoEnrich && iocs.length) {
+      this._autoEnrichResults(iocs);
+    }
 
     // Persist last analysis results
     try {
@@ -1582,9 +1610,10 @@ class SOCToolkit {
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'urlscanApiKey'], (res) => {
-          const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc' };
+          const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc', autoEnrich: false };
           const s = res.socSettings || defaults;
           this.autoAnalyze = s.autoAnalyze ?? true;
+          this.autoEnrich = s.autoEnrich ?? false;
           this.enableGraph = s.enableGraph ?? true;
           this.currentTheme = s.theme ?? 'arc';
           // Apply the theme
@@ -1641,6 +1670,7 @@ class SOCToolkit {
       } catch (e) {
         console.error('Failed to load settings:', e);
         this.autoAnalyze = true;
+        this.autoEnrich = false;
         this.enableGraph = true;
         this.currentTheme = 'arc';
         this.applyTheme(this.currentTheme);
@@ -1701,6 +1731,7 @@ class SOCToolkit {
       chrome.storage.local.get(['socSettings'], (res) => {
         const socSettings = Object.assign({}, res.socSettings, {
           autoAnalyze: this.autoAnalyze,
+          autoEnrich: this.autoEnrich,
           enableGraph: this.enableGraph,
           theme: this.currentTheme
         });
