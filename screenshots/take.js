@@ -21,28 +21,28 @@ Defanged URLs:
   hxxps://cdn[.]badactor[.]test/track.js
 `;
 
-async function getExtensionId(context) {
-  // Service workers are the most reliable signal that the MV3 extension is loaded.
+const crypto = require('crypto');
+
+function unpackedExtensionId(extPath) {
+  // Chrome derives the unpacked extension ID from the sha256 of the absolute
+  // load path: first 32 hex chars, mapped 0-9a-f -> a-p.
+  const hex = crypto.createHash('sha256').update(extPath, 'utf8').digest('hex').slice(0, 32);
+  return hex.split('').map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+}
+
+async function getExtensionId(context, extPath) {
+  // Service workers are the most reliable live signal that the MV3
+  // extension loaded; the path hash is the deterministic fallback.
   let sw = context.serviceWorkers().find(w => w.url().includes('chrome-extension://'));
   if (!sw) {
-    sw = await context.waitForEvent('serviceworker', { timeout: 15000 }).catch(() => null);
+    sw = await context.waitForEvent('serviceworker', { timeout: 8000 }).catch(() => null);
   }
   if (sw) {
     const m = sw.url().match(/^chrome-extension:\/\/([a-z]+)\//);
     if (m) return m[1];
   }
-  // Fallback: scrape about:extensions via a real page.
-  const page = await context.newPage();
-  await page.goto('chrome://extensions/');
-  await page.waitForTimeout(800);
-  const id = await page.evaluate(() => {
-    const m = location.href.match(/id=([a-z]+)/);
-    if (m) return m[1];
-    return null;
-  });
-  await page.close();
-  if (id) return id;
-  throw new Error('Could not determine extension ID');
+  console.log('[info] no service worker seen; using unpacked path-hash id');
+  return unpackedExtensionId(extPath);
 }
 
 async function shot(page, file, opts = {}) {
@@ -58,8 +58,10 @@ async function shot(page, file, opts = {}) {
   }
 
   // The cached "chrome-headless-shell" binary fails on this Mac (Mach port
-  // permission denied). Use the full Chrome-for-Testing binary instead.
-  const chromePath = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  // permission denied). Branded Google Chrome ignores --load-extension since
+  // ~v137, so default to the Playwright-cached Chrome-for-Testing binary.
+  const chromePath = process.env.CHROME_PATH
+    || path.join(process.env.HOME, 'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false, // Extensions only load with a window server on macOS.
@@ -75,7 +77,7 @@ async function shot(page, file, opts = {}) {
   });
 
   try {
-    const extId = await getExtensionId(context);
+    const extId = await getExtensionId(context, EXT_PATH);
     const popupUrl = `chrome-extension://${extId}/popup.html`;
     console.log(`[info] extension id: ${extId}`);
 
