@@ -655,6 +655,11 @@ class SOCToolkit {
 
     el('enrichRemainingItem')?.addEventListener('click', () => this._enrichRemaining());
 
+    el('enrichmentPanelCloseBtn')?.addEventListener('click', () => {
+      const panel = document.getElementById('enrichmentDetailPanel');
+      if (panel) panel.style.display = 'none';
+    });
+
     document.querySelectorAll('#exportMenu .dropdown-item').forEach(item => {
       item.addEventListener('click', (e) => {
         const format = e.target.getAttribute('data-export');
