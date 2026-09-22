@@ -279,7 +279,44 @@ class SOCToolkit {
     item.textContent = `Enrich remaining (${total})`;
   }
 
-  _renderRowStatusCellInner(stored) { return ''; } // implemented in Task 4
+  _renderRowStatusCellInner(stored) {
+    const verdict = stored.result?.summary?.verdict || 'unknown';
+    const risk = stored.result?.summary?.riskScore;
+    const riskText = risk === undefined || risk === null ? '—' : String(risk);
+    return `<button class="row-status-chip ${this.escapeHtml(verdict)}" title="Toggle enrichment summary">${this.escapeHtml(verdict)}</button>` +
+      `<span class="row-risk" title="Risk score">${this.escapeHtml(riskText)}</span>`;
+  }
+
+  _renderRowEnrichmentSummary(stored) {
+    const sources = Array.isArray(stored.result?.sources) ? stored.result.sources : [];
+    const cards = sources.map((s) => {
+      const facts = s.data ? Object.entries(s.data)
+        .filter(([, v]) => v !== null && v !== undefined && v !== '')
+        .slice(0, 3)
+        .map(([k, v]) => {
+          const display = typeof v === 'object' ? JSON.stringify(v) : String(v);
+          return `<span class="summary-line"><b>${this.escapeHtml(k)}:</b> ${this.escapeHtml(display.slice(0, 60))}<button class="summary-copy-btn" data-copy="${this.escapeHtml(display)}" title="Copy value"><i class="fa-solid fa-copy"></i></button></span>`;
+        }).join('') : '';
+      const name = this.escapeHtml(s.displayName || s.provider || 'Unknown');
+      const status = this.escapeHtml(s.status || 'error');
+      return `<div class="summary-source"><span class="summary-source-name">${name} <span class="summary-source-status ${status}">${status}</span></span>${facts}</div>`;
+    }).join('');
+    return `${cards}<button class="row-details-btn">Details</button>`;
+  }
+
+  _toggleRowSummary(item) {
+    if (!item) return;
+    const stored = this.enrichmentByIoc.get(item.dataset.value);
+    const summary = item.querySelector('.row-enrichment-summary');
+    if (!summary) return;
+    if (!summary.hidden) {
+      summary.hidden = true;
+      return;
+    }
+    if (!stored) return;
+    summary.innerHTML = this._renderRowEnrichmentSummary(stored);
+    summary.hidden = false;
+  }
 
   // Helper for batch enrichment with a single tracking notification
   async _batchEnrich(type, values) {
@@ -1078,6 +1115,11 @@ class SOCToolkit {
     for (const ioc of iocs) {
       const osintLinks = this.generateOSINTLinks(ioc.value, ioc.category);
       const escapedValue = this.escapeHtml(ioc.value);
+      const enrichType = this.normalizeEnrichType(ioc.category);
+      const stored = this.enrichmentByIoc.get(ioc.value);
+      const statusCell = stored
+        ? this._renderRowStatusCellInner(stored)
+        : (enrichType ? '<button class="row-enrich-btn" title="Enrich this IOC">Enrich</button>' : '');
 
       htmlParts.push(`
         <div class="ioc-item" data-value="${escapedValue}" data-type="${this.escapeHtml(ioc.category.toLowerCase())}">
@@ -1088,12 +1130,15 @@ class SOCToolkit {
                 ${escapedValue}
               </div>
               <span class="ioc-type type-${this.escapeHtml(ioc.category.toLowerCase())}">${this.escapeHtml(ioc.type || '')}</span>
+              <span class="row-status-cell">${statusCell}</span>
               <div class="ioc-actions" style="margin-left: auto; display: flex; gap: 4px;">
+                ${osintLinks.length ? '<button class="row-links-btn" title="Show OSINT links"><i class="fa-solid fa-link"></i> Links</button>' : ''}
                 <button class="defang-item-btn" title="Defang this IOC"><i class="fa-solid fa-shield-halved"></i></button>
                 <button class="refang-item-btn" title="Refang this IOC"><i class="fa-solid fa-link"></i></button>
               </div>
             </div>
-            <div class="osint-links">
+            <div class="row-enrichment-summary" hidden></div>
+            <div class="osint-links" hidden>
               ${osintLinks.map(link => `
                 <div class="osint-link-container">
                   <a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="osint-link" title="${this.escapeHtml(link.name)}">${this.escapeHtml(link.name)}</a>
@@ -2050,6 +2095,45 @@ class SOCToolkit {
         this.refangSingleIOC(value, item);
       });
     });
+
+    // Row controls are delegated on the list container: cells re-render as
+    // enrichment lands, and per-element listeners would go stale.
+    const listEl = document.querySelector('.ioc-list');
+    if (listEl && !listEl.dataset.rowControlsBound) {
+      listEl.dataset.rowControlsBound = '1';
+      listEl.addEventListener('click', (e) => {
+        const enrichBtn = e.target.closest('.row-enrich-btn');
+        if (enrichBtn) {
+          const item = enrichBtn.closest('.ioc-item');
+          const type = this.normalizeEnrichType(item?.getAttribute('data-type'));
+          const value = item?.getAttribute('data-value') || '';
+          if (type && value) this._batchEnrich(type, [value]);
+          return;
+        }
+        const chip = e.target.closest('.row-status-chip');
+        if (chip) {
+          this._toggleRowSummary(chip.closest('.ioc-item'));
+          return;
+        }
+        const summaryCopy = e.target.closest('.summary-copy-btn');
+        if (summaryCopy) {
+          this.copyToClipboard(summaryCopy.getAttribute('data-copy') || '');
+          return;
+        }
+        const detailsBtn = e.target.closest('.row-details-btn');
+        if (detailsBtn) {
+          const item = detailsBtn.closest('.ioc-item');
+          const stored = item && this.enrichmentByIoc.get(item.dataset.value);
+          if (stored) this.showEnrichmentPanel(stored.result);
+          return;
+        }
+        const linksBtn = e.target.closest('.row-links-btn');
+        if (linksBtn) {
+          const links = linksBtn.closest('.ioc-item')?.querySelector('.osint-links');
+          if (links) links.hidden = !links.hidden;
+        }
+      });
+    }
   }
 
   clearIOCs() {
