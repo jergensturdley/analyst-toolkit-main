@@ -19,6 +19,13 @@ node tests/verify_features.js
 #   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.zip
 #     (same source; manifest patched to event-page background + gecko settings)
 
+# Release (tag push):
+#   git tag v0.5.5 && git push origin v0.5.5
+#     → GitHub Actions release.yml: tests, both packages, addons-linter,
+#       Chrome zip uploaded to Web Store (staged, not published; needs
+#       CWS_* secrets), zip + xpi attached to the GitHub Release.
+#   AMO: submit dist/soc-analyst-toolkit-firefox-<v>.xpi manually.
+
 # Load the extension in Chrome
 #   chrome://extensions → enable Developer mode → "Load unpacked" → select this directory.
 # Changes are picked up via the service-worker reload button; popup.js/html edits require closing+reopening the popup.
