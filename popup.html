@@ -881,6 +881,12 @@
       /* Prevent overflow */
       max-width: 200px;
     }
+    #actionsMenu {
+      min-width: 190px;
+      max-width: 240px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
     /* For dropdowns that would overflow right edge, position from left */
     .dropdown:nth-last-child(-n+2) .dropdown-menu {
       right: auto;
@@ -2126,72 +2132,47 @@
   <div class="ioc-header">
     <span class="ioc-count">IOC Results [0]</span>
     <div class="ioc-controls">
-      <button class="btn btn-small" id="copyAllBtn">
-        <i class="fa-solid fa-copy"></i> Copy All
-      </button>
-      <button class="btn btn-small" id="askAiBtn" title="Open your chosen AI chat pre-built triage prompt IOCs">
-        <i class="fa-solid fa-wand-magic-sparkles"></i> Ask AI
-      </button>
       <!-- Quick Copy Dropdown -->
       <div class="dropdown">
-        <button class="btn btn-small" id="quickCopyDropdown">
-          <i class="fa-solid fa-bolt"></i> Quick Copy ▼
+        <button class="btn btn-small" id="actionsMenuBtn">
+          <i class="fa-solid fa-ellipsis"></i> Actions ▼
         </button>
-        <div class="dropdown-menu" id="quickCopyMenu">
-          <button class="dropdown-item" id="copyAllIPs"><i class="fa-solid fa-network-wired"></i> All IPs</button>
-          <button class="dropdown-item" id="copyAllDomains"><i class="fa-solid fa-globe"></i> All Domains</button>
-          <button class="dropdown-item" id="copyAllURLs"><i class="fa-solid fa-link"></i> All URLs</button>
-          <button class="dropdown-item" id="copyAllHashes"><i class="fa-solid fa-hashtag"></i> All Hashes</button>
-          <button class="dropdown-item" id="copyAllCVEs"><i class="fa-solid fa-bug"></i> All CVEs</button>
-          <button class="dropdown-item" id="copyAllMITRE"><i class="fa-solid fa-shield"></i> All MITRE</button>
-          <button class="dropdown-item" id="copyAllCrypto"><i class="fa-solid fa-bitcoin-sign"></i> All Crypto</button>
-          <button class="dropdown-item" id="copyAllMACs"><i class="fa-solid fa-network-wired"></i> All MACs</button>
-        </div>
-      </div>
-      <span class="btn-separator" aria-hidden="true"></span>
-      <button type="button" class="btn btn-small" id="enrichAllIPsBtn" title="Enrich all detected IP addresses">
-        <i class="fa-solid fa-wand-sparkles"></i> Enrich IPs
-      </button>
-      <button type="button" class="btn btn-small" id="enrichAllHashesBtn" title="Enrich all detected file hashes">
-        <i class="fa-solid fa-bug"></i> Enrich Hashes
-      </button>
-      <button type="button" class="btn btn-small" id="enrichAllDomainsBtn" title="Enrich all detected domains">
-        <i class="fa-solid fa-globe"></i> Enrich Domains
-      </button>
-      <button type="button" class="btn btn-small" id="enrichAllUrlsBtn" title="Enrich all detected URLs">
-        <i class="fa-solid fa-link"></i> Enrich URLs
-      </button>
-      <button class="btn btn-small" id="clearGraphBtn" title="Clear Graph Visualization">
-        <i class="fa-solid fa-diagram-project"></i> Clear Graph
-      </button>
-      <span class="btn-separator" aria-hidden="true"></span>
-      <div class="dropdown">
-        <button class="btn btn-small" id="exportDropdown">
-          <i class="fa-solid fa-download"></i> Export ▼
-        </button>
-        <div class="dropdown-menu" id="exportMenu">
-          <button class="dropdown-item" data-export="csv">CSV</button>
-          <button class="dropdown-item" data-export="json">JSON</button>
-          <button class="dropdown-item" data-export="md">Markdown</button>
-          <button class="dropdown-item" data-export="md-links">Markdown (links)</button>
-          <button class="dropdown-item" data-export="obsidian">Obsidian Graph</button>
-          <button class="dropdown-item" data-export="graph-png">Graph as PNG</button>
-          <button class="dropdown-item" data-export="graph-svg">Graph as SVG</button>
-        </div>
-      </div>
-      <div class="dropdown">
-        <button class="btn btn-small" id="filterDropdown">
-          <i class="fa-solid fa-filter"></i> Filter ▼
-        </button>
-        <div class="dropdown-menu" id="filterMenu">
+        <div class="dropdown-menu" id="actionsMenu">
+          <span class="menu-group-label">Copy</span>
+          <button class="dropdown-item" id="copyAllBtn"><i class="fa-solid fa-copy"></i> Copy All</button>
+          <button class="dropdown-item" id="askAiBtn" title="Open your chosen AI chat pre-built triage prompt IOCs"><i class="fa-solid fa-wand-magic-sparkles"></i> Ask AI</button>
+          <button class="dropdown-item" id="copyAllIPs"><i class="fa-solid fa-network-wired"></i> Copy IPs</button>
+          <button class="dropdown-item" id="copyAllDomains"><i class="fa-solid fa-globe"></i> Copy Domains</button>
+          <button class="dropdown-item" id="copyAllURLs"><i class="fa-solid fa-link"></i> Copy URLs</button>
+          <button class="dropdown-item" id="copyAllHashes"><i class="fa-solid fa-hashtag"></i> Copy Hashes</button>
+          <button class="dropdown-item" id="copyAllCVEs"><i class="fa-solid fa-bug"></i> Copy CVEs</button>
+          <button class="dropdown-item" id="copyAllMITRE"><i class="fa-solid fa-shield"></i> Copy MITRE</button>
+          <button class="dropdown-item" id="copyAllCrypto"><i class="fa-solid fa-bitcoin-sign"></i> Copy Crypto</button>
+          <button class="dropdown-item" id="copyAllMACs"><i class="fa-solid fa-network-wired"></i> Copy MACs</button>
+          <span class="menu-group-label">Enrich</span>
           <button class="dropdown-item" id="enrichRemainingItem" hidden>Enrich remaining</button>
-          <button class="dropdown-item" data-filter="all">All</button>
-          <button class="dropdown-item" data-filter="ip">IPs</button>
-          <button class="dropdown-item" data-filter="domain">Domains</button>
-          <button class="dropdown-item" data-filter="url">URLs</button>
-          <button class="dropdown-item" data-filter="email">Emails</button>
-          <button class="dropdown-item" data-filter="hash">Hashes</button>
-          <button class="dropdown-item" data-filter="cve">CVEs</button>
+          <span class="menu-group-label">Export</span>
+          <div id="exportMenu">
+            <button class="dropdown-item" data-export="csv">CSV</button>
+            <button class="dropdown-item" data-export="json">JSON</button>
+            <button class="dropdown-item" data-export="md">Markdown</button>
+            <button class="dropdown-item" data-export="md-links">Markdown (links)</button>
+            <button class="dropdown-item" data-export="obsidian">Obsidian Graph</button>
+            <button class="dropdown-item" data-export="graph-png">Graph as PNG</button>
+            <button class="dropdown-item" data-export="graph-svg">Graph as SVG</button>
+          </div>
+          <span class="menu-group-label">Filter</span>
+          <div id="filterMenu">
+            <button class="dropdown-item" data-filter="all">All</button>
+            <button class="dropdown-item" data-filter="ip">IPs</button>
+            <button class="dropdown-item" data-filter="domain">Domains</button>
+            <button class="dropdown-item" data-filter="url">URLs</button>
+            <button class="dropdown-item" data-filter="email">Emails</button>
+            <button class="dropdown-item" data-filter="hash">Hashes</button>
+            <button class="dropdown-item" data-filter="cve">CVEs</button>
+          </div>
+          <span class="menu-group-label">Graph</span>
+          <button class="dropdown-item" id="clearGraphBtn" title="Clear Graph Visualization"><i class="fa-solid fa-diagram-project"></i> Clear Graph</button>
         </div>
       </div>
     </div>
