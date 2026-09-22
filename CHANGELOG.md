@@ -8,6 +8,7 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 - Auto-enrichment toggle (off by default): after an analysis, the first 5 IOCs per type (IPs, domains, hashes, URLs) enrich automatically, and "Enrich remaining (N)" in the Actions menu covers the rest
 - Verdict chips and risk scores on each result row; clicking a chip expands per-provider facts with per-value copy buttons, and "Details" opens the full enrichment panel
 - Per-row Enrich and Links buttons; OSINT links are collapsed by default
+- Collapsible IOC relation graph; the collapsed or expanded choice is remembered
 
 ### Changed
 - Results header reduced to a single Actions menu holding copy, enrich, export, filter, and graph controls

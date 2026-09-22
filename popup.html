@@ -1331,6 +1331,24 @@
       display: block;
     }
 
+    .ioc-graph-header {
+      margin-top: 12px;
+    }
+    .ioc-graph-header button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+      padding: 4px 2px;
+    }
+    .ioc-graph-header button:hover { color: var(--text-primary); }
+    #graphCollapseChevron { transition: transform 0.2s; }
+    .ioc-graph-header button.collapsed #graphCollapseChevron { transform: rotate(-90deg); }
+
     /* File Hash Analysis Styles */
     .file-hash-section {
       margin: 8px 0 0 0;
@@ -2187,6 +2205,12 @@
   </div>
 
   <!-- IOC Graph Visualization -->
+  <div class="ioc-graph-header">
+    <button type="button" id="graphCollapseBtn" aria-expanded="true" aria-controls="iocGraph">
+      <i class="fa-solid fa-chevron-down" id="graphCollapseChevron" aria-hidden="true"></i>
+      IOC Relation Graph
+    </button>
+  </div>
   <div id="iocGraph" class="ioc-graph"></div>
 
   <div class="enrichment-panel" id="enrichmentDetailPanel" style="display:none;">

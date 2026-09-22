@@ -96,6 +96,7 @@ class SOCToolkit {
     this.currentTheme = 'arc'; // Default theme
     this.tlds = new Set();
     this.autoEnrich = false;
+    this.graphCollapsed = false;
     this.enrichmentByIoc = new Map();   // value -> { type, result }
     this._enrichmentRemainder = {};     // type -> value[] held back by the cap
     // Cache for debounce timeouts
@@ -655,6 +656,7 @@ class SOCToolkit {
     // --- IOC Results Panel controls ---
     el('copyAllBtn')?.addEventListener('click', () => this.copyAllIOCs());
     el('clearGraphBtn')?.addEventListener('click', () => this.clearGraph());
+    el('graphCollapseBtn')?.addEventListener('click', () => this._toggleGraphCollapsed());
     el('askAiBtn')?.addEventListener('click', () => this.askAi());
 
     el('enrichRemainingItem')?.addEventListener('click', () => this._enrichRemaining());
@@ -1110,8 +1112,10 @@ class SOCToolkit {
     // Add event listeners for results
     this.setupResultEventListeners();
 
-    // Generate and display IOC correlation graph
-    if (this.enableGraph) {
+    // Generate and display IOC correlation graph. Skip while collapsed:
+    // vis-network measures its container at init, and a hidden container
+    // yields a zero-size canvas. Expanding regenerates (see _toggleGraphCollapsed).
+    if (this.enableGraph && !this.graphCollapsed) {
       this.generateIOCGraph(iocs);
     }
   }
@@ -1643,14 +1647,16 @@ class SOCToolkit {
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'urlscanApiKey'], (res) => {
-          const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc', autoEnrich: false };
+          const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc', autoEnrich: false, graphCollapsed: false };
           const s = res.socSettings || defaults;
           this.autoAnalyze = s.autoAnalyze ?? true;
           this.autoEnrich = s.autoEnrich ?? false;
           this.enableGraph = s.enableGraph ?? true;
+          this.graphCollapsed = s.graphCollapsed ?? false;
           this.currentTheme = s.theme ?? 'arc';
           // Apply the theme
           this.applyTheme(this.currentTheme);
+          this._applyGraphCollapsed();
 
           // Set the theme selector value
           const themeSelect = document.getElementById('themeSelect');
@@ -1704,6 +1710,7 @@ class SOCToolkit {
         console.error('Failed to load settings:', e);
         this.autoAnalyze = true;
         this.autoEnrich = false;
+        this.graphCollapsed = false;
         this.enableGraph = true;
         this.currentTheme = 'arc';
         this.applyTheme(this.currentTheme);
@@ -1765,6 +1772,7 @@ class SOCToolkit {
         const socSettings = Object.assign({}, res.socSettings, {
           autoAnalyze: this.autoAnalyze,
           autoEnrich: this.autoEnrich,
+          graphCollapsed: this.graphCollapsed,
           enableGraph: this.enableGraph,
           theme: this.currentTheme
         });
@@ -3654,6 +3662,31 @@ class SOCToolkit {
       } else {
         graphContainer.classList.remove('active');
       }
+    }
+  }
+
+  _applyGraphCollapsed() {
+    const btn = document.getElementById('graphCollapseBtn');
+    const container = document.getElementById('iocGraph');
+    if (btn) {
+      btn.setAttribute('aria-expanded', this.graphCollapsed ? 'false' : 'true');
+      btn.classList.toggle('collapsed', this.graphCollapsed);
+    }
+    if (!container) return;
+    if (this.graphCollapsed) {
+      container.classList.remove('active');
+    } else if (this.iocGraph) {
+      container.classList.add('active');
+    }
+  }
+
+  _toggleGraphCollapsed() {
+    this.graphCollapsed = !this.graphCollapsed;
+    this.saveSettings();
+    this._applyGraphCollapsed();
+    // Collapsed sessions never rendered the graph (lazy); regenerate on expand.
+    if (!this.graphCollapsed && this.enableGraph && !this.iocGraph && this.lastIOCs && this.lastIOCs.length) {
+      this.generateIOCGraph(this.lastIOCs);
     }
   }
 
