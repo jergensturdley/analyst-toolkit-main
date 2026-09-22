@@ -246,7 +246,40 @@ class SOCToolkit {
     this._refreshEnrichRemainingItem();
   }
 
-  _refreshEnrichRemainingItem() {} // implemented in Task 3
+  _recordEnrichment(type, value, res) {
+    this.enrichmentByIoc.set(value, { type, result: res });
+    this._updateRowEnrichmentStatus(value);
+  }
+
+  _updateRowEnrichmentStatus(value) {
+    const item = Array.from(document.querySelectorAll('.ioc-item'))
+      .find((el) => el.dataset.value === value);
+    if (!item) return;
+    const cell = item.querySelector('.row-status-cell');
+    if (!cell) return;
+    const stored = this.enrichmentByIoc.get(value);
+    cell.innerHTML = stored ? this._renderRowStatusCellInner(stored) : '';
+  }
+
+  _enrichRemaining() {
+    const groups = this._enrichmentRemainder || {};
+    this._enrichmentRemainder = {};
+    Object.entries(groups).forEach(([type, values]) => {
+      if (values && values.length) this._batchEnrich(type, values);
+    });
+    this._refreshEnrichRemainingItem();
+  }
+
+  _refreshEnrichRemainingItem() {
+    const item = document.getElementById('enrichRemainingItem');
+    if (!item) return;
+    const total = Object.values(this._enrichmentRemainder || {})
+      .reduce((n, values) => n + (values ? values.length : 0), 0);
+    item.hidden = total === 0;
+    item.textContent = `Enrich remaining (${total})`;
+  }
+
+  _renderRowStatusCellInner(stored) { return ''; } // implemented in Task 4
 
   // Helper for batch enrichment with a single tracking notification
   async _batchEnrich(type, values) {
@@ -288,6 +321,7 @@ class SOCToolkit {
             }
             if (nodeId) this.applyAgentResultToGraph(res, nodeId, val);
           }
+          this._recordEnrichment(type, val, res);
           // Single-IOC batch runs are effectively a manual enrichment — show the
           // detail panel so the source data isn't only visible in the graph.
           if (total === 1) this.showEnrichmentPanel(res);
@@ -296,6 +330,7 @@ class SOCToolkit {
         if (completed === total) {
           note.remove();
           this.showNotification(`Enriched ${total - failed}/${total} ${type}s`, failed > 0 ? 'info' : 'success');
+          this._refreshEnrichRemainingItem();
         } else {
           updateProgress();
         }
@@ -581,6 +616,8 @@ class SOCToolkit {
     el('clearGraphBtn')?.addEventListener('click', () => this.clearGraph());
     el('askAiBtn')?.addEventListener('click', () => this.askAi());
 
+    el('enrichRemainingItem')?.addEventListener('click', () => this._enrichRemaining());
+
     document.querySelectorAll('#exportMenu .dropdown-item').forEach(item => {
       item.addEventListener('click', (e) => {
         const format = e.target.getAttribute('data-export');
@@ -588,7 +625,7 @@ class SOCToolkit {
       });
     });
 
-    document.querySelectorAll('#filterMenu .dropdown-item').forEach(item => {
+    document.querySelectorAll('#filterMenu .dropdown-item[data-filter]').forEach(item => {
       item.addEventListener('click', (e) => {
         const filter = e.target.getAttribute('data-filter');
         this.filterIOCs(filter);

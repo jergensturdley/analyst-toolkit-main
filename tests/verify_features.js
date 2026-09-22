@@ -44,6 +44,18 @@ class SOCToolkitMock {
       sha512: /\b[a-f0-9]{128}\b/gi
     };
     this.autoEnrich = false;
+    this._enrichmentRemainder = {};
+  }
+
+  // Mirrors popup.js remainder drain — keep in sync
+  drainRemainderMock() {
+    const groups = this._enrichmentRemainder || {};
+    this._enrichmentRemainder = {};
+    const drained = [];
+    Object.entries(groups).forEach(([type, values]) => {
+      (values || []).forEach((v) => drained.push([type, v]));
+    });
+    return drained;
   }
 
   extractIOCs(text) {
@@ -1180,6 +1192,17 @@ test('groupEnrichableByType: groups by agent type, drops non-enrichable', () => 
   assert.deepStrictEqual(g.hash, ['d']);
   assert.strictEqual(g.email, undefined);
   assert.strictEqual(g.cve, undefined);
+});
+
+test('enrichment remainder: drain empties the held types and returns every value', () => {
+  const m = new SOCToolkitMock();
+  m._enrichmentRemainder = { ip: ['9.9.9.9'], domain: ['c.com', 'd.com'] };
+  const drained = m.drainRemainderMock();
+  assert.strictEqual(drained.length, 3);
+  assert.ok(drained.some(([t, v]) => t === 'ip' && v === '9.9.9.9'));
+  assert.deepStrictEqual(m._enrichmentRemainder, {});
+  const again = m.drainRemainderMock();
+  assert.strictEqual(again.length, 0);
 });
 
 console.log('Test Summary:');
