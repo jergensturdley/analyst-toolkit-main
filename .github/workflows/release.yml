@@ -85,7 +85,7 @@ jobs:
         run: echo "cws=$HAS_CWS" >> "$GITHUB_OUTPUT"
 
       - name: Upload Chrome zip to Web Store (staged)
-        if: steps.secrets.outputs.cws == 'true'
+        if: startsWith(github.ref, 'refs/tags/') && steps.secrets.outputs.cws == 'true'
         env:
           EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
           CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
@@ -101,6 +101,7 @@ jobs:
           echo "Uploaded to Chrome Web Store as a staged draft. Publish from the dashboard."
 
       - name: Attach packages to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
