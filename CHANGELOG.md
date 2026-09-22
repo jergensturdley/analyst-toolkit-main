@@ -9,6 +9,7 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 - Verdict chips and risk scores on each result row; clicking a chip expands per-provider facts with per-value copy buttons, and "Details" opens the full enrichment panel
 - Per-row Enrich and Links buttons; OSINT links are collapsed by default
 - Collapsible IOC relation graph; the collapsed or expanded choice is remembered
+- "Expand all links" control above the results list
 
 ### Changed
 - Results header reduced to a single Actions menu holding copy, enrich, export, filter, and graph controls

@@ -1334,7 +1334,11 @@
     .ioc-graph-header {
       margin-top: 12px;
     }
-    .ioc-graph-header button {
+    .ioc-list-header {
+      margin-top: 10px;
+    }
+    .ioc-graph-header button,
+    .ioc-list-header button {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -1345,9 +1349,12 @@
       cursor: pointer;
       padding: 4px 2px;
     }
-    .ioc-graph-header button:hover { color: var(--text-primary); }
-    #graphCollapseChevron { transition: transform 0.2s; }
-    .ioc-graph-header button.collapsed #graphCollapseChevron { transform: rotate(-90deg); }
+    .ioc-graph-header button:hover,
+    .ioc-list-header button:hover { color: var(--text-primary); }
+    #graphCollapseChevron,
+    #expandAllLinksChevron { transition: transform 0.2s; }
+    .ioc-graph-header button.collapsed #graphCollapseChevron,
+    .ioc-list-header button.collapsed #expandAllLinksChevron { transform: rotate(-90deg); }
 
     /* File Hash Analysis Styles */
     .file-hash-section {
@@ -2196,6 +2203,13 @@
     </div>
   </div>
 
+  <!-- Bulk OSINT link toggle -->
+  <div class="ioc-list-header">
+    <button type="button" id="expandAllLinksBtn" aria-expanded="false">
+      <i class="fa-solid fa-chevron-down" id="expandAllLinksChevron" aria-hidden="true"></i>
+      <span id="expandAllLinksLabel">Expand all links</span>
+    </button>
+  </div>
   <!-- IOC List -->
   <div class="ioc-list">
     <div class="ioc-item empty-state">

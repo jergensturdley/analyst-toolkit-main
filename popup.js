@@ -657,6 +657,7 @@ class SOCToolkit {
     el('copyAllBtn')?.addEventListener('click', () => this.copyAllIOCs());
     el('clearGraphBtn')?.addEventListener('click', () => this.clearGraph());
     el('graphCollapseBtn')?.addEventListener('click', () => this._toggleGraphCollapsed());
+    el('expandAllLinksBtn')?.addEventListener('click', () => this._toggleAllOsintLinks());
     el('askAiBtn')?.addEventListener('click', () => this.askAi());
 
     el('enrichRemainingItem')?.addEventListener('click', () => this._enrichRemaining());
@@ -1111,6 +1112,7 @@ class SOCToolkit {
 
     // Add event listeners for results
     this.setupResultEventListeners();
+    this._syncExpandAllLinksState();
 
     // Generate and display IOC correlation graph. Skip while collapsed:
     // vis-network measures its container at init, and a hidden container
@@ -2090,6 +2092,7 @@ class SOCToolkit {
         if (linksBtn) {
           const links = linksBtn.closest('.ioc-item')?.querySelector('.osint-links');
           if (links) links.hidden = !links.hidden;
+          this._syncExpandAllLinksState();
         }
       });
     }
@@ -3663,6 +3666,27 @@ class SOCToolkit {
         graphContainer.classList.remove('active');
       }
     }
+  }
+
+  _syncExpandAllLinksState() {
+    const links = Array.from(document.querySelectorAll('.ioc-item .osint-links'));
+    if (!links.length) return;
+    const anyHidden = links.some((el) => el.hidden);
+    const btn = document.getElementById('expandAllLinksBtn');
+    const label = document.getElementById('expandAllLinksLabel');
+    if (btn) {
+      btn.setAttribute('aria-expanded', anyHidden ? 'false' : 'true');
+      btn.classList.toggle('collapsed', anyHidden);
+    }
+    if (label) label.textContent = anyHidden ? 'Expand all links' : 'Collapse all links';
+  }
+
+  _toggleAllOsintLinks() {
+    const links = Array.from(document.querySelectorAll('.ioc-item .osint-links'));
+    if (!links.length) return;
+    const anyHidden = links.some((el) => el.hidden);
+    links.forEach((el) => { el.hidden = !anyHidden; });
+    this._syncExpandAllLinksState();
   }
 
   _applyGraphCollapsed() {
