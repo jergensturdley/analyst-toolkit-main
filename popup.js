@@ -112,6 +112,10 @@ class SOCToolkit {
   }
 
   async init() {
+    // Version label reads from the manifest so it cannot drift from the release.
+    const versionLabel = document.getElementById('versionLabel');
+    if (versionLabel) versionLabel.textContent = `v${chrome.runtime.getManifest().version}`;
+
     this.setupEventListeners();
     this.setupSystemThemeListener(); // Listen for system theme changes
     
