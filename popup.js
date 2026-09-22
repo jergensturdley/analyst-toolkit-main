@@ -82,6 +82,8 @@ function validateAskAiTargetUrl(url) {
   return { ok: true };
 }
 
+const AUTO_ENRICH_CAP = 5; // ponytail: fixed cap; expose in settings only if quota complaints arrive
+
 class SOCToolkit {
   constructor() {
     this.currentTab = 'ioc';
@@ -204,6 +206,30 @@ class SOCToolkit {
     this.switchTab('ioc');
     this.analyzeIOCs();
     this.showStatus('IOCs extracted and displayed', 'success');
+  }
+
+  normalizeEnrichType(category) {
+    const c = String(category || '').toLowerCase();
+    if (c === 'ip' || c === 'ipv4' || c === 'ipv6') return 'ip';
+    if (c === 'domain') return 'domain';
+    if (['hash', 'md5', 'sha1', 'sha256', 'sha512'].includes(c)) return 'hash';
+    if (c === 'url') return 'url';
+    return null;
+  }
+
+  splitEnrichmentCap(values, cap = AUTO_ENRICH_CAP) {
+    const list = [...new Set(values.filter(Boolean))];
+    return { queued: list.slice(0, cap), remainder: list.slice(cap) };
+  }
+
+  groupEnrichableByType(iocs) {
+    const groups = {};
+    for (const ioc of iocs || []) {
+      const type = this.normalizeEnrichType(ioc.category);
+      if (!type) continue;
+      (groups[type] = groups[type] || []).push(ioc.value);
+    }
+    return groups;
   }
 
   // Helper for batch enrichment with a single tracking notification

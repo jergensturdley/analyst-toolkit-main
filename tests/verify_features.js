@@ -43,6 +43,7 @@ class SOCToolkitMock {
       sha256: /\b[a-f0-9]{64}\b/gi,
       sha512: /\b[a-f0-9]{128}\b/gi
     };
+    this.autoEnrich = false;
   }
 
   extractIOCs(text) {
@@ -202,6 +203,31 @@ class SOCToolkitMock {
     }
 
     return false;
+  }
+
+  // Mirrors popup.js SOCToolkit — keep in sync
+  normalizeEnrichType(category) {
+    const c = String(category || '').toLowerCase();
+    if (c === 'ip' || c === 'ipv4' || c === 'ipv6') return 'ip';
+    if (c === 'domain') return 'domain';
+    if (['hash', 'md5', 'sha1', 'sha256', 'sha512'].includes(c)) return 'hash';
+    if (c === 'url') return 'url';
+    return null;
+  }
+
+  splitEnrichmentCap(values, cap = 5) {
+    const list = [...new Set(values.filter(Boolean))];
+    return { queued: list.slice(0, cap), remainder: list.slice(cap) };
+  }
+
+  groupEnrichableByType(iocs) {
+    const groups = {};
+    for (const ioc of iocs || []) {
+      const type = this.normalizeEnrichType(ioc.category);
+      if (!type) continue;
+      (groups[type] = groups[type] || []).push(ioc.value);
+    }
+    return groups;
   }
 
   // Helper function to validate IPv6 addresses
@@ -1106,6 +1132,55 @@ test('IPAddress.to summary: non-success source is ignored', () => {
 });
 console.log(' [PASS] IPAddress.to Normalization');
 
+
+test('normalizeEnrichType: agent types collapse; non-enrichable types return null', () => {
+  const m = new SOCToolkitMock();
+  assert.strictEqual(m.normalizeEnrichType('ip'), 'ip');
+  assert.strictEqual(m.normalizeEnrichType('ipv4'), 'ip');
+  assert.strictEqual(m.normalizeEnrichType('ipv6'), 'ip');
+  assert.strictEqual(m.normalizeEnrichType('sha256'), 'hash');
+  assert.strictEqual(m.normalizeEnrichType('md5'), 'hash');
+  assert.strictEqual(m.normalizeEnrichType('hash'), 'hash');
+  assert.strictEqual(m.normalizeEnrichType('domain'), 'domain');
+  assert.strictEqual(m.normalizeEnrichType('url'), 'url');
+  assert.strictEqual(m.normalizeEnrichType('email'), null);
+  assert.strictEqual(m.normalizeEnrichType('cve'), null);
+  assert.strictEqual(m.normalizeEnrichType('mac'), null);
+  assert.strictEqual(m.normalizeEnrichType(undefined), null);
+});
+
+test('splitEnrichmentCap: caps at 5, dedupes, remainder holds the rest', () => {
+  const m = new SOCToolkitMock();
+  const { queued, remainder } = m.splitEnrichmentCap(
+    ['1.1.1.1', '2.2.2.2', '3.3.3.3', '4.4.4.4', '5.5.5.5', '6.6.6.6', '6.6.6.6'], 5);
+  assert.strictEqual(queued.length, 5);
+  assert.deepStrictEqual(remainder, ['6.6.6.6']);
+  const empty = m.splitEnrichmentCap([], 5);
+  assert.strictEqual(empty.queued.length, 0);
+  assert.strictEqual(empty.remainder.length, 0);
+  const few = m.splitEnrichmentCap(['a', 'b'], 5);
+  assert.deepStrictEqual(few, { queued: ['a', 'b'], remainder: [] });
+  assert.strictEqual(m.autoEnrich, false, 'auto-enrich must default to off');
+});
+
+test('groupEnrichableByType: groups by agent type, drops non-enrichable', () => {
+  const m = new SOCToolkitMock();
+  const iocs = [
+    { category: 'ipv4', value: '1.1.1.1' },
+    { category: 'ip', value: '2.2.2.2' },
+    { category: 'domain', value: 'a.com' },
+    { category: 'domain', value: 'b.com' },
+    { category: 'sha256', value: 'd' },
+    { category: 'email', value: 'x@y.com' },
+    { category: 'cve', value: 'CVE-2024-1234' }
+  ];
+  const g = m.groupEnrichableByType(iocs);
+  assert.deepStrictEqual(g.ip, ['1.1.1.1', '2.2.2.2']);
+  assert.deepStrictEqual(g.domain, ['a.com', 'b.com']);
+  assert.deepStrictEqual(g.hash, ['d']);
+  assert.strictEqual(g.email, undefined);
+  assert.strictEqual(g.cve, undefined);
+});
 
 console.log('Test Summary:');
 console.log('  Passed:', passed);
