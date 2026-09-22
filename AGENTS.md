@@ -99,7 +99,7 @@ Define safe, auditable, user-initiated enrichment of IOCs (IPs, domains, URLs, h
 
 ### Design Principles
 
-1. **User-Initiated Only**: All enrichment requests triggered by explicit user action (button click, context menu selection, node double-click)
+1. **User-Initiated by Default**: All enrichment requests triggered by explicit user action (button click, context menu selection, node double-click). The optional auto-enrich toggle (off by default) queues a capped batch after each analysis — first 5 per type, remainder on demand — and stays consent-gated with the same rate limits and cache.
 2. **Background Processing**: Use `background.js` / service-worker as the central orchestrator for all API calls
 3. **Separation of Concerns**: 
    - Background/service-worker: network calls, caching, rate limits, API key management

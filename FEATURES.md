@@ -77,6 +77,14 @@
 - Use {{IOC}} placeholder for dynamic URLs
 - Filter by IOC type or apply to all types
 
+## ⚡ Auto-Enrichment
+
+"Auto-enrich found IOCs" sits next to "Auto-analyze IOCs" and is off by default. When on, a finished analysis queues enrichment for the first 5 IOCs per type (IPs, domains, hashes, URLs). The Actions menu shows "Enrich remaining (N)" for anything held back.
+
+Each result row shows a verdict chip and risk score once enriched. Click the chip to expand per-provider facts, each with its own copy button; "Details" opens the full enrichment panel. The Links button toggles the OSINT link list per row.
+
+Enrichment asks for consent on first use, honors per-provider toggles and API keys, and reads the enrichment cache, so re-analyzing the same text within the cache TTL spends no quota. Closing the popup stops an in-flight queue; completed results stay cached and "Enrich remaining" picks up the rest after reopening.
+
 ## 🛠️ Batch Operations
 
 ### Deduplicate
