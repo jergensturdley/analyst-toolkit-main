@@ -65,6 +65,8 @@ async function shot(page, file, opts = {}) {
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false, // Extensions only load with a window server on macOS.
+    // The popup renders at its fixed ~800px design width; capture there and
+    // pad to the store's 1280x800 afterwards (scripts/make-store-jpegs.sh).
     viewport: { width: 820, height: 620 },
     deviceScaleFactor: 2,
     executablePath: chromePath,
