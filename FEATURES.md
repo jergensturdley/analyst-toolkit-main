@@ -83,7 +83,7 @@
 
 Each result row shows a verdict chip and risk score once enriched. Click the chip to expand per-provider facts, each with its own copy button; "Details" opens the full enrichment panel. The Links button toggles the OSINT link list per row.
 
-Enrichment asks for consent on first use, honors per-provider toggles and API keys, and reads the enrichment cache, so re-analyzing the same text within the cache TTL spends no quota. Closing the popup stops an in-flight queue; completed results stay cached and "Enrich remaining" picks up the rest after reopening.
+Enrichment asks for consent on first use, honors per-provider toggles and API keys, and reads the enrichment cache, so re-analyzing the same text within the cache TTL spends no quota. Closing the popup stops an in-flight queue. Completed results stay cached, and after reopening each remaining IOC enriches in one click from its row's Enrich button, with cache hits costing no quota.
 
 ## 🛠️ Batch Operations
 

@@ -907,64 +907,6 @@ class SOCToolkit {
       });
     });
 
-    el('enrichAllIPsBtn')?.addEventListener('click', () => {
-      const ipItems = Array.from(document.querySelectorAll('.ioc-item[data-type="ip"], .ioc-item[data-type="ipv4"], .ioc-item[data-type="ipv6"]'));
-      if (!ipItems.length) {
-        this.showNotification('No IPs found in results', 'info');
-        return;
-      }
-      const ipValues = [...new Set(ipItems.map(el => el.dataset.value).filter(Boolean))];
-      if (!ipValues.length) {
-        this.showNotification('No IP values found', 'info');
-        return;
-      }
-      this._batchEnrich('ip', ipValues);
-    });
-
-    el('enrichAllHashesBtn')?.addEventListener('click', () => {
-      const items = Array.from(document.querySelectorAll(
-        '.ioc-item[data-type="hash"], .ioc-item[data-type="md5"], .ioc-item[data-type="sha1"], .ioc-item[data-type="sha256"], .ioc-item[data-type="sha512"]'
-      ));
-      if (!items.length) {
-        this.showNotification('No hashes found in results', 'info');
-        return;
-      }
-      const values = [...new Set(items.map(el => el.dataset.value).filter(Boolean))];
-      if (!values.length) {
-        this.showNotification('No hash values found', 'info');
-        return;
-      }
-      this._batchEnrich('hash', values);
-    });
-
-    el('enrichAllDomainsBtn')?.addEventListener('click', () => {
-      const items = Array.from(document.querySelectorAll('.ioc-item[data-type="domain"]'));
-      if (!items.length) {
-        this.showNotification('No domains found in results', 'info');
-        return;
-      }
-      const values = [...new Set(items.map(el => el.dataset.value).filter(Boolean))];
-      if (!values.length) {
-        this.showNotification('No domain values found', 'info');
-        return;
-      }
-      this._batchEnrich('domain', values);
-    });
-
-    el('enrichAllUrlsBtn')?.addEventListener('click', () => {
-      const items = Array.from(document.querySelectorAll('.ioc-item[data-type="url"]'));
-      if (!items.length) {
-        this.showNotification('No URLs found in results', 'info');
-        return;
-      }
-      const values = [...new Set(items.map(el => el.dataset.value).filter(Boolean))];
-      if (!values.length) {
-        this.showNotification('No URL values found', 'info');
-        return;
-      }
-      this._batchEnrich('url', values);
-    });
-
     el('rateLimitDetails')?.addEventListener('toggle', (e) => {
       if (!e.target.open) return;
       const container = document.getElementById('rateLimitStatusContainer');
