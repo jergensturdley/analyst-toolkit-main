@@ -406,14 +406,14 @@ When an individual source fails:
 
 ```javascript
 {
-  "provider": "greynoise",
-  "displayName": "GreyNoise",
+  "provider": "abuseipdb",
+  "displayName": "AbuseIPDB",
   "status": "error",
   "cached": false,
   "data": null,
   "errorMessage": "API rate limit exceeded. Try again in 15 minutes.",
   "errorCode": "RATE_LIMIT_EXCEEDED",  // Standardized error codes
-  "apiUrl": "https://api.greynoise.io/v3/community/1.2.3.4"
+  "apiUrl": "https://api.abuseipdb.com/api/v2/check?ipAddress=1.2.3.4"
 }
 ```
 
@@ -560,11 +560,6 @@ const RATE_LIMITS = {
     requests: 4,         // Free tier: 4 req/min
     window: 60000,       // Per minute
     backoff: 900000      // 15 min backoff
-  },
-  greynoise: {
-    requests: 100,
-    window: 86400000,
-    backoff: 300000
   },
   shodan: {
     requests: 100,
@@ -740,7 +735,7 @@ Show provider rows with a loading spinner; append parsed nodes/edges as they arr
 │                                                │
 │ ⏳ AbuseIPDB          Fetching...              │
 │                                                │
-│ ⏳ GreyNoise          Fetching...              │
+│ ⏳ IPAddress.to       Fetching...              │
 └────────────────────────────────────────────────┘
 ```
 
@@ -755,7 +750,7 @@ Let the user accept or discard agent results before they are merged into the gra
 │ ☑ Add ASN node: AS4837 (ipinfo.io)            │
 │ ☑ Add Geo node: Beijing, CN (ipinfo.io)       │
 │ ☑ Add Reputation: 85/100 High Risk (AbuseIPDB)│
-│ ☐ Add Classification: Malicious (GreyNoise)   │
+│ ☐ Add Classification: Malicious (VirusTotal)  │
 │                                                │
 │ [Accept Selected] [Accept All] [Discard All]  │
 └────────────────────────────────────────────────┘
@@ -808,7 +803,7 @@ Add "Enrichment" section below OSINT links:
 │ │   Verdict: Malicious                       │ │
 │ │   Category: Activity                       │ │
 │ │   Tags: Scanner, Web Scanner               │ │
-│ │   Source: GreyNoise                        │ │
+│ │   Source: VirusTotal                       │ │
 │ └────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────┘
 ```
@@ -831,7 +826,7 @@ Show clear, progressive loading indicators:
 │ ⏳ Enriching IP address...                 │
 │ • Querying ipinfo.io...         ✓ Done    │
 │ • Querying AbuseIPDB...          ⏳         │
-│ • Querying GreyNoise...          ⏳         │
+│ • Querying IPAddress.to...       ⏳         │
 └────────────────────────────────────────────┘
 ```
 
@@ -846,7 +841,7 @@ Handle errors gracefully:
 │   Rate limit exceeded. Try again in 14m.   │
 │   [View cached result (2 days old)]        │
 │                                            │
-│ ❌ GreyNoise                               │
+│ ❌ VirusTotal                              │
 │   API key invalid. Check settings.         │
 │   [Configure API key]                      │
 └────────────────────────────────────────────┘

@@ -8,13 +8,13 @@ The extension is 100% free. There are no in-app purchases, no subscriptions, no 
 
 ## Data storage
 
-Settings, snippets, IOC history, and enrichment-agent results are stored locally in your browser via `chrome.storage.local`. They never leave your machine except when you explicitly initiate an OSINT lookup.
+Settings, snippets, IOC history, and enrichment-agent results are stored locally in your browser via `chrome.storage.local`. They never leave your machine except when you initiate an OSINT lookup or consented enrichment runs.
 
 The optional Paste button uses clipboard-read access only after you click it, to place clipboard text into the IOC input. Clipboard contents are not read in the background, stored automatically, or sent to the extension author.
 
 ## Network usage
 
-Outbound HTTP requests only occur when you click an OSINT lookup link or run an enrichment agent. Requests go to the providers configured in Settings (default: VirusTotal, ipinfo.io, AbuseIPDB, IPAddress.to). Ask AI is a clipboard-copy helper: it builds a triage prompt and copies it to your clipboard so you can paste it into the AI chat of your choice; the extension itself does not contact any AI provider. The extension never makes network requests without a user action.
+Outbound HTTP requests only occur when you click an OSINT lookup link or run an enrichment agent. The optional auto-enrich toggle (off by default) also queues enrichment after an analysis, capped at the first five indicators per type; it runs only after you accept the one-time consent prompt, and you can switch it off at any time. Requests go to the providers configured in Settings. The default set is VirusTotal, ipinfo.io, AbuseIPDB, and IPAddress.to, plus the keyless sources crt.sh, MalwareBazaar, and urlscan. Ask AI is a clipboard-copy helper: it builds a triage prompt and copies it to your clipboard so you can paste it into the AI chat of your choice; the extension itself does not contact any AI provider. The extension makes no network requests outside enrichment and lookups.
 
 ## Third-party access
 

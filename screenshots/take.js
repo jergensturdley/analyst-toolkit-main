@@ -106,53 +106,46 @@ async function shot(page, file, opts = {}) {
     await shot(page, '02-ioc-parsing.png');
 
     // ── 2. Enrichment view ─────────────────────────────────────────────────
-    // Try to enrich the first IP via its per-item button if present, otherwise
-    // fall back to the bulk "Enrich IPs" button.
+    // Click the first row's Enrich pill (per-row enrichment via the live
+    // providers), pass the one-time consent gate, then capture the verdict
+    // chip with its inline summary and the full detail panel.
     let enriched = false;
-    const enrichBtns = await page.$$('.enrich-btn, [data-action="enrich"]');
-    if (enrichBtns.length > 0) {
-      await enrichBtns[0].click();
+    const rowEnrich = await page.$('.ioc-item[data-type="ip"] .row-enrich-btn')
+      || await page.$('.row-enrich-btn');
+    if (rowEnrich) {
+      await rowEnrich.click();
       enriched = true;
-    } else {
-      const enrichIps = await page.$('#enrichAllIPsBtn');
-      if (enrichIps) {
-        await enrichIps.click();
-        enriched = true;
-      }
     }
     if (enriched) {
-      await page.waitForSelector('#enrichmentDetailPanel', { state: 'visible', timeout: 8000 }).catch(() => {});
-      // Wait for either the panel body to open or for source cards to render.
-      await page.waitForFunction(() => {
-        const panel = document.querySelector('#enrichmentDetailPanel');
-        if (!panel || panel.style.display === 'none') return false;
-        const cards = document.querySelectorAll('.enrichment-source-card');
-        return cards.length > 0;
-      }, { timeout: 12000 }).catch(() => {});
-      // Open the panel body so the source cards are visible in the shot.
-      await page.evaluate(() => {
-        const body = document.querySelector('#enrichmentPanelBody');
-        if (body) body.classList.add('open');
-      });
+      // First enrichment shows the consent modal; allow it so the flow runs.
+      await page.waitForSelector('#consentModal', { state: 'visible', timeout: 4000 }).catch(() => {});
+      const allow = await page.$('#consentAllowBtn');
+      if (allow && await allow.isVisible()) {
+        await allow.click();
+      }
+      await page.waitForSelector('.row-status-chip', { timeout: 20000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      const chip = await page.$('.row-status-chip');
+      if (chip) await chip.click();            // expand the inline summary
+      await page.waitForTimeout(300);
+      const details = await page.$('.row-details-btn');
+      if (details) {
+        await details.click();                 // open the full enrichment panel
+        await page.waitForSelector('#enrichmentDetailPanel', { state: 'visible', timeout: 5000 }).catch(() => {});
+        await page.waitForFunction(() => document.querySelectorAll('.enrichment-source-card').length > 0, { timeout: 10000 }).catch(() => {});
+      }
+      await page.evaluate(() => document.getElementById('enrichmentDetailPanel')?.scrollIntoView({ block: 'center' }));
       await page.waitForTimeout(800);
     }
     await shot(page, '03-enrichment.png');
 
     // ── 3. Graph visualization ─────────────────────────────────────────────
-    // Trigger the graph (the popup exposes a graph element with id iocGraph).
-    await page.evaluate(() => {
-      // Try common entry points used by popup.js.
-      const fns = ['renderGraph', 'showGraph', 'updateGraph', 'displayGraph'];
-      for (const f of fns) {
-        if (typeof window[f] === 'function') { window[f](); return; }
-      }
-      // Fallback: simulate clicking an IOC to surface any graph wiring.
-      const firstIoc = document.querySelector('#iocResults .ioc-item');
-      if (firstIoc) firstIoc.click();
-    });
-    await page.waitForSelector('#iocGraph.active', { timeout: 5000 }).catch(() => {});
-    // Some implementations use a vis-network canvas; give it a moment to lay out.
-    await page.waitForTimeout(1200);
+    // The graph generates together with the results (enableGraph defaults on).
+    await page.waitForSelector('#iocGraph.active', { timeout: 8000 }).catch(() => {});
+    // vis-network runs a physics layout; let it settle before the shot.
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => document.getElementById('iocGraph')?.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(300);
     await shot(page, '04-graph.png');
 
     // ── 4. Settings tab ────────────────────────────────────────────────────
