@@ -19,12 +19,13 @@ node tests/verify_features.js
 #   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.xpi
 #     (same source; manifest patched to event-page background + gecko settings)
 
-# Release (tag push):
-#   git tag v0.5.5 && git push origin v0.5.5
-#     → GitHub Actions release.yml: tests, both packages, addons-linter,
-#       Chrome zip uploaded to Web Store (staged, not published; needs
-#       CWS_* secrets), zip + xpi attached to the GitHub Release.
-#   AMO: submit dist/soc-analyst-toolkit-firefox-<v>.xpi manually.
+# Release (manual):
+#   Build both packages above (clean tree required), then upload by hand:
+#     Chrome: dist/soc-analyst-toolkit-<v>.zip → Web Store dashboard
+#     AMO:    dist/soc-analyst-toolkit-firefox-<v>.xpi
+#   (The release.yml tag-push workflow was removed — CWS OAuth refresh-token
+#   maintenance wasn't worth the automated staged upload. ci.yml still runs
+#   tests on push/PR.)
 
 # Load the extension in Chrome
 #   chrome://extensions → enable Developer mode → "Load unpacked" → select this directory.
