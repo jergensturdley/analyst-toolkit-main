@@ -62,7 +62,7 @@ REQUIRED_FILES=(
   popup.html
   triage_prompt.js
   tlds.js
-  vis-network.min.js
+  vis-network.js
 )
 REQUIRED_DIRS=(
   icons
