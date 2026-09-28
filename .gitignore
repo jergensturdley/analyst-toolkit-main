@@ -64,3 +64,6 @@ cli-config.yaml
 .github/instructions/codacy.instructions.md
 .github/copilot-instructions.md
 docs/superpowers
+
+# local scratch output
+brag-output/
