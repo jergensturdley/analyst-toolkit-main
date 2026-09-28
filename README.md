@@ -80,7 +80,7 @@ This extension provides a suite of tools to accelerate the investigation of secu
 
 Requires Firefox 128 or later. The checked-in `manifest.json` targets Chrome, so build the Firefox variant before loading it — Firefox MV3 has no service workers, and the build rewrites the background to an event page and adds the `browser_specific_settings.gecko` block.
 
-1. Run `scripts/build-store-package.sh firefox` from the repository root. The build refuses to run on a dirty tree, so commit or stash first. It writes `dist/staging-firefox/` and `dist/soc-analyst-toolkit-firefox-<version>.zip`.
+1. Run `scripts/build-store-package.sh firefox` from the repository root. The build refuses to run on a dirty tree, so commit or stash first. It writes `dist/staging-firefox/` and `dist/soc-analyst-toolkit-firefox-<version>.xpi`.
 2. Navigate to `about:debugging#/runtime/this-firefox`.
 3. Click "Load Temporary Add-on" and select `dist/staging-firefox/manifest.json`.
 

@@ -16,7 +16,7 @@ node tests/verify_features.js
 
 # Build store packages (clean tree required)
 #   scripts/build-store-package.sh            → dist/soc-analyst-toolkit-<v>.zip (Chrome)
-#   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.zip
+#   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.xpi
 #     (same source; manifest patched to event-page background + gecko settings)
 
 # Release (tag push):
