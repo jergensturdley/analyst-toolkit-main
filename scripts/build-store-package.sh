@@ -41,7 +41,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 if [ "$TARGET" = "firefox" ]; then
-  ZIP_NAME="soc-analyst-toolkit-firefox-${VERSION}.zip"
+  ZIP_NAME="soc-analyst-toolkit-firefox-${VERSION}.xpi"
   STAGING_DIR="dist/staging-firefox"
 else
   ZIP_NAME="soc-analyst-toolkit-${VERSION}.zip"
@@ -62,7 +62,7 @@ REQUIRED_FILES=(
   popup.html
   triage_prompt.js
   tlds.js
-  vis-network.min.js
+  vis-network.js
 )
 REQUIRED_DIRS=(
   icons

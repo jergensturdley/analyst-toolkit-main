@@ -66,3 +66,10 @@ jobs:
             }
             console.log('manifest OK (v' + m.version + ', ' + (m.host_permissions?.length ?? 0) + ' host permissions)');
           "
+      - name: Package Chrome and Firefox builds
+        run: |
+          bash scripts/build-store-package.sh
+          bash scripts/build-store-package.sh firefox
+
+      - name: Lint Firefox package with addons-linter
+        run: npx --yes addons-linter@latest dist/staging-firefox --output text

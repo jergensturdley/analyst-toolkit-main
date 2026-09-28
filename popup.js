@@ -97,6 +97,9 @@ class SOCToolkit {
     this.tlds = new Set();
     this.autoEnrich = false;
     this.graphCollapsed = false;
+    this.linksExpanded = false;
+    this.activeFilter = 'all';
+    this.iocSearchQuery = '';
     this.enrichmentByIoc = new Map();   // value -> { type, result }
     this._enrichmentRemainder = {};     // type -> value[] held back by the cap
     // Cache for debounce timeouts
@@ -681,6 +684,11 @@ class SOCToolkit {
       });
     });
 
+    el('iocSearchInput')?.addEventListener('input', (e) => {
+      this.iocSearchQuery = e.target.value.trim();
+      this.applyIOCFilter();
+    });
+
     el('selectAllIOCs')?.addEventListener('change', (e) => {
       const checked = e.target.checked;
       document.querySelectorAll('.ioc-item input[type="checkbox"]').forEach(cb => {
@@ -1092,7 +1100,7 @@ class SOCToolkit {
               </div>
             </div>
             <div class="row-enrichment-summary" hidden></div>
-            <div class="osint-links" hidden>
+            <div class="osint-links"${this.linksExpanded ? '' : ' hidden'}>
               ${osintLinks.map(link => `
                 <div class="osint-link-container">
                   <a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="osint-link" title="${this.escapeHtml(link.name)}">${this.escapeHtml(link.name)}</a>
@@ -1113,6 +1121,7 @@ class SOCToolkit {
     // Add event listeners for results
     this.setupResultEventListeners();
     this._syncExpandAllLinksState();
+    this.applyIOCFilter();
 
     // Generate and display IOC correlation graph. Skip while collapsed:
     // vis-network measures its container at init, and a hidden container
@@ -1578,14 +1587,24 @@ class SOCToolkit {
   }
 
   filterIOCs(category) {
+    this.activeFilter = category;
+    this.applyIOCFilter();
+  }
+
+  applyIOCFilter() {
     const items = document.querySelectorAll('.ioc-item');
+    const query = this.iocSearchQuery.toLowerCase();
     let visibleCount = 0;
     items.forEach(item => {
       // Filter on the item's category (data-type), not the type-label text.
       // Labels are md5/sha1/ipv4/… so text matching never matched "hash" and
       // was fragile for "ip".
       const type = item.dataset.type || '';
-      if (category === 'all' || type === category) {
+      const typeMatch = this.activeFilter === 'all' || type === this.activeFilter;
+      const textMatch = query === ''
+        || (item.querySelector('.ioc-value')?.textContent || '').toLowerCase().includes(query)
+        || (item.querySelector('.ioc-type')?.textContent || '').toLowerCase().includes(query);
+      if (typeMatch && textMatch) {
         item.style.display = '';
         visibleCount++;
       } else {
@@ -1649,12 +1668,13 @@ class SOCToolkit {
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'urlscanApiKey'], (res) => {
-          const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc', autoEnrich: false, graphCollapsed: false };
+          const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc', autoEnrich: false, graphCollapsed: false, linksExpanded: false };
           const s = res.socSettings || defaults;
           this.autoAnalyze = s.autoAnalyze ?? true;
           this.autoEnrich = s.autoEnrich ?? false;
           this.enableGraph = s.enableGraph ?? true;
           this.graphCollapsed = s.graphCollapsed ?? false;
+          this.linksExpanded = s.linksExpanded ?? false;
           this.currentTheme = s.theme ?? 'arc';
           // Apply the theme
           this.applyTheme(this.currentTheme);
@@ -1775,6 +1795,7 @@ class SOCToolkit {
           autoAnalyze: this.autoAnalyze,
           autoEnrich: this.autoEnrich,
           graphCollapsed: this.graphCollapsed,
+          linksExpanded: this.linksExpanded,
           enableGraph: this.enableGraph,
           theme: this.currentTheme
         });
@@ -3686,6 +3707,8 @@ class SOCToolkit {
     if (!links.length) return;
     const anyHidden = links.some((el) => el.hidden);
     links.forEach((el) => { el.hidden = !anyHidden; });
+    this.linksExpanded = anyHidden;
+    this.saveSettings();
     this._syncExpandAllLinksState();
   }
 

@@ -16,8 +16,16 @@ node tests/verify_features.js
 
 # Build store packages (clean tree required)
 #   scripts/build-store-package.sh            → dist/soc-analyst-toolkit-<v>.zip (Chrome)
-#   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.zip
+#   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.xpi
 #     (same source; manifest patched to event-page background + gecko settings)
+
+# Release (manual):
+#   Build both packages above (clean tree required), then upload by hand:
+#     Chrome: dist/soc-analyst-toolkit-<v>.zip → Web Store dashboard
+#     AMO:    dist/soc-analyst-toolkit-firefox-<v>.xpi
+#   (The release.yml tag-push workflow was removed — CWS OAuth refresh-token
+#   maintenance wasn't worth the automated staged upload. ci.yml still runs
+#   tests on push/PR.)
 
 # Load the extension in Chrome
 #   chrome://extensions → enable Developer mode → "Load unpacked" → select this directory.
