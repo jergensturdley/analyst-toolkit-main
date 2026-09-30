@@ -2,6 +2,17 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [0.5.5] - 2026-09-30
+
+### Added
+- Search box above the IOC list that filters results live as you type, combining with the category filter
+- The expand/collapse-all-links choice is remembered, so rows open the same way next popup session
+
+### Fixed
+- Expand-all-links toggle saved its state inverted, so the persisted choice never matched the toggle
+- Popup version label read from the manifest instead of a hardcoded "v0.4"
+- `vis-network.min.js` replaced with an unminified build (Chrome Web Store rejected the minified bundle for readability review)
+
 ## [0.5.4] - 2026-09-21
 
 ### Added
