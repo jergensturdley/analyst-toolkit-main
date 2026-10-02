@@ -20,7 +20,12 @@ npm test   # tests/verify_features.js + tests/verify_popup.js + tests/verify_bac
 #     (same source; manifest patched to event-page background + gecko settings)
 
 # Release (manual):
-#   Build both packages above (clean tree required), then upload by hand:
+#   0. Bump the version EVERYWHERE in one commit — CI fails `npm test` if any drifts:
+#        manifest.json, package.json, popup.html #versionLabel fallback,
+#        CHANGELOG.md (turn [Unreleased] into the dated release section),
+#        docs/STORE_LISTING.md (header + Version History row)
+#      then tag v<v> and push the tag.
+#   1. Build both packages above (clean tree required), then upload by hand:
 #     Chrome: dist/soc-analyst-toolkit-<v>.zip → Web Store dashboard
 #     AMO:    dist/soc-analyst-toolkit-firefox-<v>.xpi
 #   (The release.yml tag-push workflow was removed — CWS OAuth refresh-token
