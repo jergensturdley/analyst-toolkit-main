@@ -30,7 +30,7 @@ function test(name, fn) {
 }
 
 async function main() {
-  const { toolkit, document, storage, globals } = await loadPopupToolkit(path.join(__dirname, '..'));
+  const { toolkit, document, storage, globals, tabCreates, closeCalls } = await loadPopupToolkit(path.join(__dirname, '..'));
 
   const makeRow = (value, type) => ({
     dataset: {},
@@ -427,6 +427,227 @@ async function main() {
     assert.ok(value.includes('185.220.101.34'), 'IP missing: ' + JSON.stringify(value));
     document.getElementById('iocInput').value = '';
     storage.remove(['lastAnalysisResults', 'savedIOCInput']);
+  });
+
+  console.log('\n--- OSINT links keep the popup open ---');
+
+  await test('osint link left-click opens a background tab instead of navigating', () => {
+    const handler = document._listeners.click;
+    assert.ok(handler, 'delegated document click handler not bound');
+    let prevented = false;
+    const anchor = { href: 'https://www.virustotal.com/gui/ip/1.2.3.4' };
+    handler({
+      button: 0,
+      ctrlKey: false, metaKey: false, shiftKey: false, altKey: false,
+      target: { closest: (sel) => (sel === 'a[target="_blank"]' ? anchor : null) },
+      preventDefault: () => { prevented = true; },
+    });
+    assert.strictEqual(prevented, true, 'native navigation must be prevented');
+    assert.strictEqual(tabCreates.length, 1, 'exactly one tab: ' + JSON.stringify(tabCreates));
+    assert.strictEqual(tabCreates[0].url, 'https://www.virustotal.com/gui/ip/1.2.3.4');
+    assert.strictEqual(tabCreates[0].active, false, 'default must open in the background');
+    tabCreates.length = 0;
+  });
+
+  await test('osint link opens in the foreground when the setting is off', () => {
+    const handler = document._listeners.click;
+    toolkit.osintLinksBackground = false;
+    try {
+      handler({
+        button: 0,
+        target: { closest: () => ({ href: 'https://urlscan.io/search/#evil.com' }) },
+        preventDefault() {},
+      });
+    } finally {
+      toolkit.osintLinksBackground = true;
+    }
+    assert.strictEqual(tabCreates.length, 1);
+    assert.strictEqual(tabCreates[0].active, true, 'setting off must focus the tab');
+    tabCreates.length = 0;
+  });
+
+  await test('modifier clicks keep native browser behavior', () => {
+    const handler = document._listeners.click;
+    let prevented = false;
+    const ev = (mods) => ({
+      button: 0, ...mods,
+      target: { closest: () => ({ href: 'https://www.shodan.io/host/1.2.3.4' }) },
+      preventDefault: () => { prevented = true; },
+    });
+    handler(ev({ ctrlKey: true }));
+    handler(ev({ metaKey: true }));
+    handler(ev({ shiftKey: true }));
+    handler(ev({ altKey: true }));
+    assert.strictEqual(prevented, false, 'modifiers must not be intercepted');
+    assert.strictEqual(tabCreates.length, 0, 'no programmatic tab opens: ' + JSON.stringify(tabCreates));
+  });
+
+  await test("bulk 'osint' action routes selected rows through the same setting", () => {
+    const vtLink = { href: 'https://www.virustotal.com/gui/domain/evil.com' };
+    const row = {
+      querySelector: (sel) => (sel === '.osint-link[href*="virustotal.com"]'
+        ? vtLink
+        : sel === '.ioc-value' ? { textContent: 'evil.com' } : null),
+    };
+    document.__setQuerySelectorAll('.ioc-item input[type="checkbox"]:checked', [{ closest: () => row }]);
+    toolkit.handleBulkAction('osint');
+    document.__setQuerySelectorAll('.ioc-item input[type="checkbox"]:checked', []);
+    assert.strictEqual(tabCreates.length, 1, 'one tab per selected row: ' + JSON.stringify(tabCreates));
+    assert.strictEqual(tabCreates[0].url, 'https://www.virustotal.com/gui/domain/evil.com');
+    assert.strictEqual(tabCreates[0].active, false, 'bulk opens must honor the background default');
+    tabCreates.length = 0;
+  });
+
+  await test('osintLinksBackground persists through saveSettings/loadSettings', async () => {
+    storage.set({ socSettings: { osintLinksBackground: false } });
+    await toolkit.loadSettings();
+    assert.strictEqual(toolkit.osintLinksBackground, false, 'stored false must load');
+    assert.strictEqual(document.getElementById('osintLinksBackgroundToggle').checked, false,
+      'checkbox must sync to the restored state');
+    const change = document.getElementById('osintLinksBackgroundToggle')._listeners.change;
+    assert.ok(change, 'osint background toggle change handler not bound');
+    change({ target: { checked: true } });
+    const stored = await new Promise((resolve) => storage.get(['socSettings'], resolve));
+    assert.strictEqual(stored.socSettings.osintLinksBackground, true, 'toggle must persist');
+    storage.remove(['socSettings']);
+  });
+
+  console.log('\n--- floating window ---');
+
+  const floatKit = await loadPopupToolkit(path.join(__dirname, '..'), { float: true });
+
+  await test('loading with ?float=1 sets floatMode, the body class and the window id', () => {
+    assert.strictEqual(floatKit.toolkit.floatMode, true, 'float flag must set floatMode');
+    assert.strictEqual(floatKit.document.body.classList.contains('floating'), true, 'body must carry floating');
+    assert.strictEqual(floatKit.toolkit._floatWindowId, 42, 'window id cached from chrome.windows.getCurrent');
+  });
+
+  await test('toolbar load keeps floating off the body and the grip unwired', () => {
+    assert.strictEqual(toolkit.floatMode, false);
+    assert.strictEqual(document.body.classList.contains('floating'), false, 'toolbar body must not carry floating');
+    assert.strictEqual(document.getElementById('floatResizeGrip')._listeners.pointerdown, undefined,
+      'grip must not be wired outside floating mode');
+  });
+
+  await test('clampWindowSize enforces the min and max table', () => {
+    // Field-wise: deepStrictEqual fails cross-realm (vm prototypes).
+    const belowMin = toolkit.clampWindowSize(100, 100);
+    assert.strictEqual(belowMin.width, 380);
+    assert.strictEqual(belowMin.height, 420);
+    const aboveMax = toolkit.clampWindowSize(3000, 2000);
+    assert.strictEqual(aboveMax.width, 2400);
+    assert.strictEqual(aboveMax.height, 1600);
+    const inRange = toolkit.clampWindowSize(800, 600);
+    assert.strictEqual(inRange.width, 800);
+    assert.strictEqual(inRange.height, 600);
+  });
+
+  await test('Escape in toolbar clears IOCs; in floating it closes the window', () => {
+    const keydown = document._listeners.keydown;
+    assert.ok(keydown, 'global keydown handler not bound');
+    let cleared = 0;
+    const originalClear = toolkit.clearIOCs;
+    toolkit.clearIOCs = () => { cleared++; };
+    try {
+      keydown({ key: 'Escape' });
+    } finally {
+      toolkit.clearIOCs = originalClear;
+    }
+    assert.strictEqual(cleared, 1, 'toolbar Esc must clear the analysis');
+    assert.strictEqual(closeCalls.length, 0, 'toolbar Esc must not close the window');
+
+    let floatCleared = 0;
+    const originalFloatClear = floatKit.toolkit.clearIOCs;
+    floatKit.toolkit.clearIOCs = () => { floatCleared++; };
+    try {
+      floatKit.document._listeners.keydown({ key: 'Escape' });
+    } finally {
+      floatKit.toolkit.clearIOCs = originalFloatClear;
+    }
+    assert.strictEqual(floatKit.closeCalls.length, 1, 'floating Esc must close the window');
+    assert.strictEqual(floatCleared, 0, 'floating Esc must not clear the analysis');
+  });
+
+  await test('Escape in floating dismisses an open shortcuts modal instead of closing', () => {
+    const modal = floatKit.document.getElementById('keyboardShortcutsModal');
+    const closesBefore = floatKit.closeCalls.length;
+    modal.style.display = 'flex';
+    floatKit.document._listeners.keydown({ key: 'Escape' });
+    assert.strictEqual(modal.style.display, 'none', 'modal must close');
+    assert.strictEqual(floatKit.closeCalls.length, closesBefore, 'window must stay open while a modal shows');
+  });
+
+  await test('dragging the resize grip updates the window with clamped, throttled sizes', async () => {
+    const grip = floatKit.document.getElementById('floatResizeGrip');
+    const { pointerdown: down, pointermove: move, pointerup: up } = grip._listeners;
+    assert.ok(down && move && up, 'grip pointer handlers not bound');
+    floatKit.globals.innerWidth = 800;
+    floatKit.globals.innerHeight = 600;
+    floatKit.toolkit._floatWindowId = 42;
+    down({ button: 0, pointerId: 7, clientX: 200, clientY: 150, preventDefault() {} });
+    move({ pointerId: 7, clientX: -300, clientY: -500 });
+    assert.strictEqual(floatKit.windowUpdates.length, 1, 'one update per move');
+    assert.deepStrictEqual(floatKit.windowUpdates[0], { id: 42, width: 380, height: 420 },
+      'sizes must clamp to the minimum: ' + JSON.stringify(floatKit.windowUpdates[0]));
+    move({ pointerId: 7, clientX: 0, clientY: 0 });
+    assert.strictEqual(floatKit.windowUpdates.length, 1, 'a move while in flight is deferred, not sent');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.strictEqual(floatKit.windowUpdates.length, 2, 'the deferred size coalesces into exactly one update');
+    assert.deepStrictEqual(floatKit.windowUpdates[1], { id: 42, width: 600, height: 450 },
+      'the coalesced update carries the latest clamped size');
+    up({ pointerId: 7 });
+    move({ pointerId: 7, clientX: 0, clientY: 0 });
+    assert.strictEqual(floatKit.windowUpdates.length, 2, 'no updates after pointerup');
+    floatKit.windowUpdates.length = 0;
+  });
+
+  console.log('\n--- sidebar navigation ---');
+
+  await test('navLayout: seeded sidebar adds the body class, default stays absent', async () => {
+    assert.strictEqual(document.body.classList.contains('nav-sidebar'), false, 'default must be tabs');
+    storage.set({ socSettings: { navLayout: 'sidebar' } });
+    await toolkit.loadSettings();
+    assert.strictEqual(toolkit.navLayout, 'sidebar');
+    assert.strictEqual(document.body.classList.contains('nav-sidebar'), true, 'sidebar must tag the body');
+    storage.set({ socSettings: { navLayout: 'tabs' } });
+    await toolkit.loadSettings();
+    assert.strictEqual(toolkit.navLayout, 'tabs');
+    assert.strictEqual(document.body.classList.contains('nav-sidebar'), false, 'tabs must drop the class');
+    storage.remove(['socSettings']);
+  });
+
+  await test('flipping the nav radio persists the choice and toggles the class', async () => {
+    const sidebarRadio = document.getElementById('navLayoutSidebar');
+    const tabsRadio = document.getElementById('navLayoutTabs');
+    const sidebarChange = sidebarRadio._listeners.change;
+    assert.ok(sidebarChange, 'nav sidebar radio change handler not bound');
+    // A real browser checks the radio before dispatching change.
+    sidebarRadio.checked = true;
+    tabsRadio.checked = false;
+    sidebarChange({ target: sidebarRadio });
+    assert.strictEqual(toolkit.navLayout, 'sidebar');
+    assert.strictEqual(document.body.classList.contains('nav-sidebar'), true);
+    const stored = await new Promise((resolve) => storage.get(['socSettings'], resolve));
+    assert.strictEqual(stored.socSettings.navLayout, 'sidebar', 'choice must persist');
+
+    const tabsChange = tabsRadio._listeners.change;
+    assert.ok(tabsChange, 'nav tabs radio change handler not bound');
+    tabsRadio.checked = true;
+    sidebarRadio.checked = false;
+    tabsChange({ target: tabsRadio });
+    assert.strictEqual(toolkit.navLayout, 'tabs');
+    assert.strictEqual(document.body.classList.contains('nav-sidebar'), false, 'class must drop on tabs');
+    storage.remove(['socSettings']);
+  });
+
+  await test('applyWindowLayout keeps floating and nav classes independent', () => {
+    toolkit.navLayout = 'sidebar';
+    toolkit.applyWindowLayout();
+    assert.strictEqual(document.body.classList.contains('nav-sidebar'), true);
+    assert.strictEqual(document.body.classList.contains('floating'), false, 'toolbar stays non-floating');
+    toolkit.navLayout = 'tabs';
+    toolkit.applyWindowLayout();
+    assert.strictEqual(document.body.classList.contains('nav-sidebar'), false);
   });
 
   console.log('\nTest Summary:');

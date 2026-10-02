@@ -5,6 +5,7 @@ const vm = require('vm');
 const path = require('path');
 
 function stubEl(id) {
+  const classes = new Set();
   const el = {
     id,
     value: '',
@@ -14,7 +15,16 @@ function stubEl(id) {
     title: '',
     checked: false,
     dataset: {},
-    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    classList: {
+      add: (...names) => names.forEach((n) => classes.add(n)),
+      remove: (...names) => names.forEach((n) => classes.delete(n)),
+      toggle(name, force) {
+        const on = force === undefined ? !classes.has(name) : Boolean(force);
+        if (on) classes.add(name); else classes.delete(name);
+        return on;
+      },
+      contains: (name) => classes.has(name),
+    },
     _listeners: {},
     _attrs: {},
     addEventListener(type, fn) { el._listeners[type] = fn; },
@@ -32,6 +42,8 @@ function stubEl(id) {
     focus() {},
     select() {},
     remove() {},
+    setPointerCapture() {},
+    releasePointerCapture() {},
   };
   return el;
 }
@@ -40,6 +52,7 @@ function makeDocument() {
   const elements = {};
   const bySelector = {};
   const bySelectorAll = {};
+  const listeners = {};
   const doc = {
     readyState: 'complete',
     getElementById(id) { return (elements[id] = elements[id] || stubEl(id)); },
@@ -48,7 +61,9 @@ function makeDocument() {
     __setQuerySelector(sel, el) { bySelector[sel] = el; },
     __setQuerySelectorAll(sel, els) { bySelectorAll[sel] = els; },
     createElement(tag) { return (doc.__lastCreated = stubEl(tag)); },
-    addEventListener() {},
+    addEventListener(type, fn) { listeners[type] = fn; },
+    removeEventListener(type) { delete listeners[type]; },
+    _listeners: listeners,
     body: stubEl('body'),
     documentElement: stubEl('html'),
   };
@@ -75,22 +90,27 @@ function makeStorageArea() {
   };
 }
 
-async function loadPopupToolkit(root) {
+async function loadPopupToolkit(root, opts = {}) {
   const src = fs.readFileSync(path.join(root, 'popup.js'), 'utf8');
   const document = makeDocument();
   const storageArea = makeStorageArea();
+  const tabCreates = [];
+  const windowUpdates = [];
+  const closeCalls = [];
 
   const sandbox = {
     console,
     TextEncoder,
+    URLSearchParams,
     btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     atob: (s) => Buffer.from(s, 'base64').toString('binary'),
     setTimeout,
     clearTimeout,
     setInterval,
     clearInterval,
+    close: () => { closeCalls.push(true); },
     navigator: { clipboard: { writeText: async () => {} }, userAgent: 'node-harness' },
-    location: { href: 'chrome-extension://harness/popup.html' },
+    location: { href: 'chrome-extension://harness/popup.html', search: opts.float ? '?float=1' : '' },
     document,
     chrome: {
       runtime: {
@@ -101,7 +121,11 @@ async function loadPopupToolkit(root) {
         lastError: null,
       },
       storage: { local: { ...storageArea }, sync: { ...storageArea }, onChanged: { addListener() {} } },
-      tabs: { create() {}, query: async () => [] },
+      tabs: { create: (createOptions) => { tabCreates.push(createOptions); }, query: async () => [] },
+      windows: {
+        getCurrent: async () => ({ id: 42 }),
+        update: (id, updateInfo) => { windowUpdates.push(Object.assign({ id }, updateInfo)); return Promise.resolve(); },
+      },
       contextMenus: { create() {}, onClicked: { addListener() {} } },
     },
   };
@@ -140,7 +164,7 @@ async function loadPopupToolkit(root) {
     // keep production's own fallback set
   }
 
-  return { toolkit, document, storage: storageArea, globals: sandbox };
+  return { toolkit, document, storage: storageArea, globals: sandbox, tabCreates, windowUpdates, closeCalls };
 }
 
 module.exports = { loadPopupToolkit };
