@@ -276,6 +276,16 @@ async function test(name, fn) {
     assert.strictEqual(res.payload, undefined);
   });
 
+  console.log('\n--- floating window ---');
+
+  await test('toggleFloat creates the window at popup.html?float=1', async () => {
+    const created = [];
+    bg.sandbox.chrome.windows.create = async (options) => { created.push(options); return { id: 1 }; };
+    await bg.dispatch({ action: 'toggleFloat' });
+    assert.ok(created[0] && /popup\.html\?float=1$/.test(created[0].url),
+      'window must open the float-flagged URL, got: ' + (created[0] && created[0].url));
+  });
+
   console.log('\nTest Summary:');
   console.log('  Passed:', passed);
   console.log('  Failed:', failed);

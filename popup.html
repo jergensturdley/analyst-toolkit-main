@@ -594,6 +594,43 @@
       display: block;
     }
 
+    /* Optional sidebar navigation (Settings → Window & Layout). Fixed-position
+       modals and toasts are children of body but out of flow, so the grid
+       only lays out header, nav and the visible tab. */
+    body.nav-sidebar {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      grid-template-rows: auto 1fr;
+    }
+
+    body.nav-sidebar .header {
+      grid-column: 1 / -1;
+    }
+
+    body.nav-sidebar .tab-nav {
+      flex-direction: column;
+      border-bottom: none;
+      border-right: 1px solid var(--border-primary);
+    }
+
+    body.nav-sidebar .tab-btn {
+      flex: none;
+      justify-content: flex-start;
+      text-align: left;
+      margin-bottom: 0;
+      border-bottom: none;
+      border-left: 2px solid transparent;
+    }
+
+    body.nav-sidebar .tab-btn.active {
+      border-left-color: var(--button-active);
+    }
+
+    body.nav-sidebar .tab-content {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
     /* IOC Analysis Styles */
 
     .ioc-input {
@@ -1166,6 +1203,33 @@
     body.float-mode .header {
       cursor: move;
       user-select: none;
+    }
+
+    /* Floating window (opened at popup.html?float=1): the page fills
+       whatever size the window is resized to */
+    body.floating {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .resize-grip {
+      display: none;
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      width: 16px;
+      height: 16px;
+      cursor: nwse-resize;
+      z-index: 9000; /* below the modals (9999+) */
+      background: linear-gradient(135deg, transparent 50%, var(--border-primary) 50%);
+    }
+
+    body.floating .resize-grip {
+      display: block;
+    }
+
+    .resize-grip:hover {
+      background: linear-gradient(135deg, transparent 50%, var(--button-active) 50%);
     }
 
 /* Snippet Tab Buttons */
@@ -1908,6 +1972,15 @@
       min-width: 120px;
     }
 
+    .settings-radio {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
     .settings-label-block {
       display: block;
       font-size: 11px;
@@ -2033,7 +2106,7 @@
         <div style="margin-bottom:16px;">
           <h4 style="color:var(--text-primary); margin:0 0 8px 0; font-size:13px;">Global</h4>
           <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Show this help</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">?</kbd></div>
-          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Close / Clear</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Esc</kbd></div>
+          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Close / Clear (closes the window when floating)</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Esc</kbd></div>
         </div>
         <div style="margin-bottom:16px;">
           <h4 style="color:var(--text-primary); margin:0 0 8px 0; font-size:13px;">Navigation</h4>
@@ -2417,6 +2490,26 @@
             <option value="midnight">Midnight</option>
           </select>
         </div>
+      </div>
+    </div>
+
+    <!-- 2. Window & Layout -->
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-window-restore" aria-hidden="true"></i> Window &amp; Layout
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-row-inline">
+          <label class="settings-label">Navigation</label>
+          <label class="settings-radio"><input type="radio" name="navLayout" id="navLayoutTabs" value="tabs" checked> Tabs across the top</label>
+          <label class="settings-radio"><input type="radio" name="navLayout" id="navLayoutSidebar" value="sidebar"> Sidebar on the left</label>
+        </div>
+        <div class="settings-row-inline">
+          <label class="settings-label" style="min-width:auto;">
+            <input type="checkbox" id="osintLinksBackgroundToggle" checked> Open OSINT links in a background tab (keeps this window open)
+          </label>
+          <span class="settings-hint">Middle-click or Ctrl/Cmd-click always opens normally.</span>
+        </div>
         <div class="settings-row-inline">
           <label class="settings-label">Floating Window</label>
           <button id="toggleFloatingBtn" class="btn btn-secondary btn-small">
@@ -2427,7 +2520,7 @@
       </div>
     </div>
 
-    <!-- 2. API Keys & Integrations -->
+    <!-- 3. API Keys & Integrations -->
     <div class="settings-section">
       <div class="settings-section-header">
         <i class="fa-solid fa-key" aria-hidden="true"></i> API Keys &amp; Integrations
@@ -2467,7 +2560,7 @@
       </div>
     </div>
 
-    <!-- 3. Enrichment Providers -->
+    <!-- 4. Enrichment Providers -->
     <div class="settings-section">
       <div class="settings-section-header">
         <i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Enrichment Providers
@@ -2502,7 +2595,7 @@
       </div>
     </div>
 
-    <!-- 4. OSINT Sources -->
+    <!-- 5. OSINT Sources -->
     <div class="settings-section">
       <div class="settings-section-header">
         <i class="fa-solid fa-globe" aria-hidden="true"></i> OSINT Sources
@@ -2566,7 +2659,7 @@
       </div>
     </div>
 
-    <!-- 5. Storage -->
+    <!-- 6. Storage -->
     <div class="settings-section">
       <div class="settings-section-header">
         <i class="fa-solid fa-database" aria-hidden="true"></i> Storage
@@ -2606,7 +2699,7 @@
       </div>
     </div>
 
-    <!-- 6. Keyboard Shortcuts (reference) -->
+    <!-- 7. Keyboard Shortcuts (reference) -->
     <details class="settings-section" style="margin-bottom:10px;">
       <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
         <i class="fa-solid fa-keyboard" aria-hidden="true"></i> Keyboard Shortcuts
@@ -2711,6 +2804,8 @@
     </div>
   </div>
   
+  <div id="floatResizeGrip" class="resize-grip" aria-hidden="true" title="Drag to resize"></div>
+
   <script src="triage_prompt.js"></script>
   <script src="popup.js"></script>
 </body>
