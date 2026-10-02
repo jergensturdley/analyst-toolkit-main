@@ -929,6 +929,18 @@ test('store listing header reflects the manifest version', () => {
     `docs/STORE_LISTING.md header must say 'reflecting v${manifest.version}'`);
 });
 
+test('manifest declares the Chrome side panel at popup.html', () => {
+  assert.ok(manifest.side_panel && manifest.side_panel.default_path === 'popup.html',
+    'manifest.json must declare side_panel.default_path = popup.html (Chrome-only key; the Firefox build strips it)');
+});
+
+test('manifest grants the sidePanel permission the API needs', () => {
+  // Without it chrome.sidePanel stays undefined in Chrome and the popup hides
+  // every side-panel affordance — the e2e rig caught exactly that.
+  assert.ok(Array.isArray(manifest.permissions) && manifest.permissions.includes('sidePanel'),
+    'manifest.json permissions must include "sidePanel"');
+});
+
 console.log(' [PASS] Version consistency');
 
 // ==================== Privacy & Consent (store-readiness item 7) ====================

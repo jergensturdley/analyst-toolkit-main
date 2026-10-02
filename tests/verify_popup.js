@@ -30,7 +30,7 @@ function test(name, fn) {
 }
 
 async function main() {
-  const { toolkit, document, storage, globals, tabCreates, closeCalls } = await loadPopupToolkit(path.join(__dirname, '..'));
+  const { toolkit, document, storage, globals, tabCreates, closeCalls, sidePanelOpens, sidePanelBehavior } = await loadPopupToolkit(path.join(__dirname, '..'));
 
   const makeRow = (value, type) => ({
     dataset: {},
@@ -648,6 +648,54 @@ async function main() {
     toolkit.navLayout = 'tabs';
     toolkit.applyWindowLayout();
     assert.strictEqual(document.body.classList.contains('nav-sidebar'), false);
+  });
+
+  console.log('\n--- side panel ---');
+
+  const panelKit = await loadPopupToolkit(path.join(__dirname, '..'), { panel: true });
+
+  await test('loading with ?panel=1 sets panelMode and the body class', () => {
+    assert.strictEqual(panelKit.toolkit.panelMode, true, 'panel flag must set panelMode');
+    assert.strictEqual(panelKit.document.body.classList.contains('panel'), true, 'body must carry panel');
+    assert.strictEqual(toolkit.panelMode, false, 'toolbar load stays non-panel');
+    assert.strictEqual(document.body.classList.contains('panel'), false, 'toolbar body must not carry panel');
+  });
+
+  await test('_openSidePanel opens the side panel for the current window', async () => {
+    await toolkit._openSidePanel();
+    assert.strictEqual(sidePanelOpens.length, 1,
+      'exactly one open call, got: ' + JSON.stringify(sidePanelOpens));
+    // Field-wise: deepStrictEqual fails cross-realm (vm prototypes).
+    assert.strictEqual(sidePanelOpens[0].windowId, 42, 'must pass the current window id');
+  });
+
+  await test('the sidePanel header button is wired to _openSidePanel', async () => {
+    const click = document.getElementById('sidePanelBtn')._listeners.click;
+    assert.ok(click, 'sidePanelBtn click handler not bound');
+    await click();
+    assert.strictEqual(sidePanelOpens.length, 2, 'click must open the panel');
+  });
+
+  await test('actionOpensPanel toggle persists and switches the action behavior', async () => {
+    const change = document.getElementById('actionOpensPanelToggle')._listeners.change;
+    assert.ok(change, 'actionOpensPanel change handler not bound');
+    change({ target: { checked: true } });
+    assert.strictEqual(toolkit.actionOpensPanel, true, 'state must update');
+    assert.strictEqual(sidePanelBehavior[sidePanelBehavior.length - 1].openPanelOnActionClick, true,
+      'setPanelBehavior must follow the checkbox');
+    const stored = await new Promise((resolve) => storage.get(['socSettings'], resolve));
+    assert.strictEqual(stored.socSettings.actionOpensPanel, true, 'choice must persist');
+    change({ target: { checked: false } });
+    assert.strictEqual(toolkit.actionOpensPanel, false);
+    assert.strictEqual(sidePanelBehavior[sidePanelBehavior.length - 1].openPanelOnActionClick, false);
+    storage.remove(['socSettings']);
+  });
+
+  await test('side panel entries hide when chrome.sidePanel is missing (Firefox)', async () => {
+    const ffKit = await loadPopupToolkit(path.join(__dirname, '..'), { noSidePanel: true });
+    for (const id of ['sidePanelBtn', 'sidePanelRow', 'actionOpensPanelRow']) {
+      assert.strictEqual(ffKit.document.getElementById(id).style.display, 'none', id + ' must hide');
+    }
   });
 
   console.log('\nTest Summary:');

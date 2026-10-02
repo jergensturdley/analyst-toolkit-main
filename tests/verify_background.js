@@ -286,6 +286,42 @@ async function test(name, fn) {
       'window must open the float-flagged URL, got: ' + (created[0] && created[0].url));
   });
 
+  console.log('\n--- side panel ---');
+
+  await test('sidePanel.setOptions pins the panel path at top-level startup', () => {
+    // Runs before any dispatch: only the top-level load (not onInstalled, not a
+    // message) can have produced these calls.
+    assert.ok(bg.sidePanelCalls.setOptions.some((o) => o && o.path === 'popup.html?panel=1' && o.enabled === true),
+      'expected setOptions({ path: "popup.html?panel=1", enabled: true }) at load, got: '
+        + JSON.stringify(bg.sidePanelCalls.setOptions));
+  });
+
+  await test('onInstalled also re-pins the side panel options', async () => {
+    const before = bg.sidePanelCalls.setOptions.length;
+    const onInstalled = bg.listeners.installed[0];
+    assert.strictEqual(typeof onInstalled, 'function', 'onInstalled listener must be registered');
+    await onInstalled({ reason: 'update' });
+    assert.ok(bg.sidePanelCalls.setOptions.length > before,
+      'onInstalled must call setOptions again');
+  });
+
+  await test('startup re-applies the persisted toolbar-click panel preference', async () => {
+    assert.strictEqual(typeof bg.fns.configureSidePanel, 'function', 'configureSidePanel must be reachable');
+    bg.sidePanelCalls.setPanelBehavior.length = 0;
+    bg.fns.configureSidePanel();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.strictEqual(bg.sidePanelCalls.setPanelBehavior.length, 0,
+      'no setPanelBehavior call without the setting');
+
+    bg.storageData['socSettings'] = { actionOpensPanel: true };
+    bg.fns.configureSidePanel();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(bg.sidePanelCalls.setPanelBehavior.some((o) => o && o.openPanelOnActionClick === true),
+      'setPanelBehavior({openPanelOnActionClick:true}) expected after restart with the setting on, got: '
+        + JSON.stringify(bg.sidePanelCalls.setPanelBehavior));
+    delete bg.storageData['socSettings'];
+  });
+
   console.log('\nTest Summary:');
   console.log('  Passed:', passed);
   console.log('  Failed:', failed);

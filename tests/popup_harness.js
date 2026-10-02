@@ -97,6 +97,10 @@ async function loadPopupToolkit(root, opts = {}) {
   const tabCreates = [];
   const windowUpdates = [];
   const closeCalls = [];
+  const sidePanelOpens = [];
+  const sidePanelBehavior = [];
+
+  const search = opts.float ? '?float=1' : opts.panel ? '?panel=1' : '';
 
   const sandbox = {
     console,
@@ -110,7 +114,7 @@ async function loadPopupToolkit(root, opts = {}) {
     clearInterval,
     close: () => { closeCalls.push(true); },
     navigator: { clipboard: { writeText: async () => {} }, userAgent: 'node-harness' },
-    location: { href: 'chrome-extension://harness/popup.html', search: opts.float ? '?float=1' : '' },
+    location: { href: 'chrome-extension://harness/popup.html' + search, search },
     document,
     chrome: {
       runtime: {
@@ -127,6 +131,13 @@ async function loadPopupToolkit(root, opts = {}) {
         update: (id, updateInfo) => { windowUpdates.push(Object.assign({ id }, updateInfo)); return Promise.resolve(); },
       },
       contextMenus: { create() {}, onClicked: { addListener() {} } },
+      // Chrome-only API; omit entirely under { noSidePanel: true } (Firefox).
+      ...(opts.noSidePanel ? {} : {
+        sidePanel: {
+          open: (options) => { sidePanelOpens.push(options); return Promise.resolve(); },
+          setPanelBehavior: (options) => { sidePanelBehavior.push(options); return Promise.resolve(); },
+        },
+      }),
     },
   };
   sandbox.window = sandbox;
@@ -164,7 +175,7 @@ async function loadPopupToolkit(root, opts = {}) {
     // keep production's own fallback set
   }
 
-  return { toolkit, document, storage: storageArea, globals: sandbox, tabCreates, windowUpdates, closeCalls };
+  return { toolkit, document, storage: storageArea, globals: sandbox, tabCreates, windowUpdates, closeCalls, sidePanelOpens, sidePanelBehavior };
 }
 
 module.exports = { loadPopupToolkit };
