@@ -132,7 +132,6 @@
     });
 
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let count = 0;
     const max = 200;
 
     const wrapMatch = (node, idx, len, entry) => {
@@ -152,19 +151,25 @@
       node.parentNode.replaceChild(frag, node);
     };
 
-    while (walker.nextNode() && count < max) {
+    // Collect matches first: wrapping replaces the walker's current node, and a
+    // detached current node ends the walk after the first highlight.
+    const matches = [];
+    while (walker.nextNode() && matches.length < max) {
       const node = walker.currentNode;
       if (!node || !node.nodeValue || !node.nodeValue.trim()) continue;
       const textLower = node.nodeValue.toLowerCase();
       for (const entry of uniques) {
         const idx = textLower.indexOf(entry.lower);
         if (idx !== -1) {
-          wrapMatch(node, idx, entry.lower.length, entry);
-          count += 1;
+          matches.push({ node, idx, len: entry.lower.length, entry });
           break;
         }
       }
     }
+    for (const m of matches) {
+      wrapMatch(m.node, m.idx, m.len, m.entry);
+    }
+    const count = matches.length;
 
     showPageNotification(`🔍 IOC highlighting: ${count} indicator${count === 1 ? '' : 's'}`, 'info');
   }
