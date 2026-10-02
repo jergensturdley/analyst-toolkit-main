@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Convert screenshots/take.js captures into Chrome Web Store JPEGs
 # (1280x800): scale to 800 high, pad onto the popup's background color.
+# screenshots 07-09 (sidebar / floating window / side panel) are produced
+# end-to-end by scripts/capture-feature-shots.js, which writes their store
+# JPEGs itself.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 i=1
