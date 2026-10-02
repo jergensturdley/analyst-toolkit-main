@@ -2,6 +2,12 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Chrome side panel: open the toolkit in the browser's sidebar from the header button or Settings → Window & Layout; a segmented pill nav and a narrow, non-overflowing layout fill the panel, and an option makes the toolbar button open the sidebar instead of the popup (Chrome only — Firefox has no side panel API, and its build strips the manifest key)
+
 ## [0.5.6] - 2026-10-02
 
 ### Fixed

@@ -6,7 +6,8 @@
 #
 # The Firefox build stages the same files, then rewrites manifest.json:
 # event-page background (Firefox MV3 has no service workers) plus the
-# browser_specific_settings.gecko block AMO requires.
+# browser_specific_settings.gecko block AMO requires; the Chrome-only
+# side_panel key is stripped (Firefox has no sidePanel API).
 #
 # Refuses to run on a dirty tree (committed CSS / WIP would be packaged).
 # Excludes dev artifacts (.codegraph, .claude, .superpowers, tests, docs/superpowers,
@@ -110,12 +111,16 @@ done
 #       with mature MV3 + install-time host-permission prompt; data_collection
 #       disclosure is mandatory for new AMO submissions — this extension
 #       collects nothing)
+#     - drop side_panel (Chrome-only key; Firefox has no sidePanel API)
 if [ "$TARGET" = "firefox" ]; then
   node -e '
     const fs = require("fs");
     const p = process.argv[1] + "/manifest.json";
     const m = JSON.parse(fs.readFileSync(p, "utf8"));
     m.background = { scripts: ["background.js"] };
+    delete m.side_panel;
+    // Chrome-only permission; Firefox warns on unknown permission strings.
+    m.permissions = (m.permissions || []).filter((p) => p !== "sidePanel");
     m.browser_specific_settings = {
       gecko: {
         id: "soc-analyst-toolkit@jergensturdley.github.io",
@@ -124,7 +129,7 @@ if [ "$TARGET" = "firefox" ]; then
       }
     };
     fs.writeFileSync(p, JSON.stringify(m, null, 2) + "\n");
-    console.log("Patched manifest for Firefox (event page + gecko settings).");
+    console.log("Patched manifest for Firefox (event page + gecko settings, side_panel removed).");
   ' "$STAGING_DIR"
 fi
 

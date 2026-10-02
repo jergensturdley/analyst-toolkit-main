@@ -90,8 +90,10 @@ class SOCToolkit {
     this.snippets = [];
     this.autoAnalyze = true;
     this.floatMode = false;
+    this.panelMode = false;
     this.navLayout = 'tabs';
     this.osintLinksBackground = true;
+    this.actionOpensPanel = false;
     this._floatWindowId = null;
     this.customOsintSources = [];
     this.enableGraph = true;
@@ -123,14 +125,16 @@ class SOCToolkit {
     const versionLabel = document.getElementById('versionLabel');
     if (versionLabel) versionLabel.textContent = `v${chrome.runtime.getManifest().version}`;
 
-    // The background opens the floating window at popup.html?float=1; the
-    // toolbar popup loads without a query string.
+    // The background opens the floating window at popup.html?float=1 and the
+    // side panel at popup.html?panel=1; the toolbar popup loads without a
+    // query string.
     this.floatMode = new URLSearchParams(location.search).has('float');
     if (this.floatMode && chrome.windows?.getCurrent) {
       chrome.windows.getCurrent()
         .then((win) => { if (win) this._floatWindowId = win.id; })
         .catch(() => {});
     }
+    this.panelMode = new URLSearchParams(location.search).has('panel');
 
     this.setupEventListeners();
     this.setupSystemThemeListener(); // Listen for system theme changes
@@ -624,6 +628,7 @@ class SOCToolkit {
 
     // Header controls
     el('floatBtn')?.addEventListener('click', () => this.toggleFloat());
+    el('sidePanelBtn')?.addEventListener('click', () => this._openSidePanel());
     el('closeBtn')?.addEventListener('click', () => this.closeWindow());
     this._setupResizeGrip();
 
@@ -756,6 +761,14 @@ class SOCToolkit {
     // Window & Layout: OSINT link background preference
     el('osintLinksBackgroundToggle')?.addEventListener('change', (e) => {
       this.osintLinksBackground = e.target.checked;
+      this.saveSettings();
+    });
+
+    // Window & Layout: toolbar click opens the side panel instead of the popup
+    el('actionOpensPanelToggle')?.addEventListener('change', (e) => {
+      this.actionOpensPanel = e.target.checked;
+      // Fire-and-forget: panel behavior is browser-side runtime state.
+      chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: e.target.checked }).catch(() => {});
       this.saveSettings();
     });
 
@@ -1001,6 +1014,16 @@ class SOCToolkit {
 
     // Floating window button
     el('toggleFloatingBtn')?.addEventListener('click', () => this.toggleFloat());
+
+    // Side panel is Chrome-only; Firefox has no chrome.sidePanel, so hide the
+    // header button and the Window & Layout rows entirely.
+    el('toggleSidePanelBtn')?.addEventListener('click', () => this._openSidePanel());
+    if (!chrome.sidePanel) {
+      for (const id of ['sidePanelBtn', 'sidePanelRow', 'actionOpensPanelRow']) {
+        const node = el(id);
+        if (node) node.style.display = 'none';
+      }
+    }
 
     // Simple dropdown toggles for Export / Filter headers
     document.querySelectorAll('.dropdown > .btn').forEach(btn => {
@@ -1757,6 +1780,7 @@ class SOCToolkit {
           this.currentTheme = s.theme ?? 'arc';
           this.osintLinksBackground = s.osintLinksBackground ?? true;
           this.navLayout = s.navLayout === 'sidebar' ? 'sidebar' : 'tabs';
+          this.actionOpensPanel = s.actionOpensPanel ?? false;
           // Apply the theme
           this.applyTheme(this.currentTheme);
           this._applyGraphCollapsed();
@@ -1772,6 +1796,8 @@ class SOCToolkit {
           if (enableGraphToggle) enableGraphToggle.checked = this.enableGraph;
           const osintLinksBackgroundToggle = document.getElementById('osintLinksBackgroundToggle');
           if (osintLinksBackgroundToggle) osintLinksBackgroundToggle.checked = this.osintLinksBackground;
+          const actionOpensPanelToggle = document.getElementById('actionOpensPanelToggle');
+          if (actionOpensPanelToggle) actionOpensPanelToggle.checked = this.actionOpensPanel;
           const navLayoutTabsRadio = document.getElementById('navLayoutTabs');
           if (navLayoutTabsRadio) navLayoutTabsRadio.checked = this.navLayout === 'tabs';
           const navLayoutSidebarRadio = document.getElementById('navLayoutSidebar');
@@ -1896,7 +1922,8 @@ class SOCToolkit {
           enableGraph: this.enableGraph,
           theme: this.currentTheme,
           navLayout: this.navLayout,
-          osintLinksBackground: this.osintLinksBackground
+          osintLinksBackground: this.osintLinksBackground,
+          actionOpensPanel: this.actionOpensPanel
         });
         chrome.storage.local.set({ socSettings });
       });
@@ -2847,6 +2874,7 @@ class SOCToolkit {
   // Single reconciler for layout-affecting body classes.
   applyWindowLayout() {
     document.body.classList.toggle('floating', this.floatMode);
+    document.body.classList.toggle('panel', this.panelMode);
     document.body.classList.toggle('nav-sidebar', this.navLayout === 'sidebar');
   }
 
@@ -2920,6 +2948,18 @@ class SOCToolkit {
       }
     } catch (e) {
       this.showStatus('Error toggling floating window', 'error');
+    }
+  }
+
+  // Chrome side panel (feature-detected; Firefox has no chrome.sidePanel).
+  // open() requires a user gesture and the target window id.
+  async _openSidePanel() {
+    if (!chrome.sidePanel?.open || !chrome.windows?.getCurrent) return;
+    try {
+      const win = await chrome.windows.getCurrent();
+      if (win) await chrome.sidePanel.open({ windowId: win.id });
+    } catch (e) {
+      this.showStatus('Error opening the side panel', 'error');
     }
   }
 

@@ -89,6 +89,7 @@ This extension performs one purpose: it extracts, transforms, and links IOCs for
 | `notifications` | Shows brief progress and success messages during enrichment and copy actions. No push notifications. |
 | `contextMenus` | Adds right-click entries ("Lookup in VirusTotal", "Analyze with SOC Toolkit") for fast pivoting. |
 | `scripting` | Injects a minimal content script into the active tab to capture selected text when you invoke the extension. |
+| `sidePanel` | Lets the toolkit open in the browser's side panel when you click "Open in sidebar" or turn on the toolbar-click option. Chrome-only; grants no page access. |
 | Host permissions for OSINT domains | Opens OSINT lookup links and enrichment requests to the exact hosts listed below. No `<all_urls>` permission. Custom user-added URLs open as normal browser tabs. |
 
 ---
