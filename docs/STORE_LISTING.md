@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — SOC Analyst Toolkit
 
-Store copy reflecting v0.5.5. Host lists and permission names match
+Store copy reflecting v0.5.6. Host lists and permission names match
 `manifest.json` exactly; update both together on any permission change.
 
 ## Store Metadata
@@ -41,6 +41,11 @@ SOC Analyst Toolkit is a free, privacy-first browser extension for security oper
 - See how extracted indicators relate in an interactive graph.
 - Right-click a node to enrich it, pull passive DNS, resolve ASNs, or open it in VirusTotal or CyberChef.
 - Collapsible out of the way when you only need the list; the choice is remembered.
+
+**Workspace**
+- Pop the toolkit into a floating window that stays open while you work; drag the corner grip to resize it, press Esc to close it.
+- OSINT links open in background tabs so your analysis stays on screen; middle-click or Ctrl/Cmd-click keeps normal browser behavior.
+- Choose tabs across the top or a sidebar rail on the left in Settings → Window & Layout.
 
 **Defanging & Refanging**
 - Defang IOCs for safe sharing (hxxp://, [.] , [@] , etc.).
@@ -197,6 +202,7 @@ This extension does not load or execute any remote code. All logic runs locally 
 
 | Version | Date | Notes |
 |---|---|---|
+| 0.5.6 | 2026-10-02 | Sidebar navigation and a resizable floating window with Esc-to-close; OSINT links open in background tabs so the popup stays open; 28 fixes across IOC parsing, popup state and enrichment agents |
 | 0.5.5 | 2026-09-30 | Live IOC results search box; expand/collapse-all-links choice remembered; toggle-state, version-label and packaging fixes |
 | 0.5.4 | 2026-09-21 | Opt-in auto-enrichment (first 5 per type), verdict chips with inline enrichment summaries, single grouped Actions menu, enrichment panel close, collapsible IOC relation graph |
 | 0.5.3 | 2026-09-09 | IPAddress.to enrichment source and OSINT link; GreyNoise removed (service discontinued); per-field copy buttons on enrichment cards |
