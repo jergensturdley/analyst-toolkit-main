@@ -127,9 +127,11 @@ class SOCToolkit {
     this.patterns = {
       url: /\bhttps?:\/\/[\w.-]+(?::\d+)?(?:\/[\w\-._~:/?#[\]@!$&'()*+,;=%]*)?/gi,
       ipv4: /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g,
-      // IPv6 pattern - handles full, compressed, and mixed formats. 
-      // Removed leading \b to better handle addresses following colons or brackets.
-      ipv6: /(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+|::(?:ffff(?::0{1,4})?:)?(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])\.){3}(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9]))\b/gi,
+      // IPv6 pattern - permissive candidate match; isValidIPv6 gates out
+      // MACs, ports and timestamps. An ordered alternation truncated
+      // addresses like 2001:db8::1 to 2001:db8::, so match anything
+      // colon-shaped (plus IPv4 tail / zone id) and validate instead.
+      ipv6: /[0-9A-Fa-f]*(?::[0-9A-Fa-f]*)+(?:\.\d{1,3}){0,3}(?:%[0-9A-Za-z]+)?/g,
       cve: /\bCVE-\d{4}-\d{4,}\b/gi,
       mitre: /\bT\d{4}(?:\.\d{3})?\b/gi,
       btc: /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g,
@@ -260,8 +262,9 @@ class SOCToolkit {
   }
 
   _updateRowEnrichmentStatus(value) {
+    // Rows may display a defanged value; compare fanged so enrichment lands.
     const item = Array.from(document.querySelectorAll('.ioc-item'))
-      .find((el) => el.dataset.value === value);
+      .find((el) => this.fangText(el.dataset.value) === value);
     if (!item) return;
     const cell = item.querySelector('.row-status-cell');
     if (!cell) return;
@@ -314,7 +317,7 @@ class SOCToolkit {
 
   _toggleRowSummary(item) {
     if (!item) return;
-    const stored = this.enrichmentByIoc.get(item.dataset.value);
+    const stored = this.enrichmentByIoc.get(this.fangText(item.dataset.value));
     const summary = item.querySelector('.row-enrichment-summary');
     if (!summary) return;
     if (!summary.hidden) {
@@ -1032,6 +1035,9 @@ class SOCToolkit {
     }
     // Automatically refang defanged IOCs before analysis
     input = this.fangText(input);
+    // Drop any held-back IOCs from a previous analysis
+    this._enrichmentRemainder = {};
+    this._refreshEnrichRemainingItem();
     // Clear OSINT links cache when analyzing new IOCs
     this._osintLinksCache.clear();
     const iocs = this.extractIOCs(input);
@@ -1113,6 +1119,11 @@ class SOCToolkit {
         </div>`);
     }
     listEl.innerHTML = htmlParts.join('');
+
+    // Rows always render unchecked; the header checkbox must not keep a
+    // stale checked state from a previous analysis.
+    const selectAll = document.getElementById('selectAllIOCs');
+    if (selectAll) selectAll.checked = false;
 
     // Update count
     const countEl = resultsContainer.querySelector('.ioc-count');
@@ -1238,6 +1249,7 @@ class SOCToolkit {
       const itemType = typeEl.textContent.toLowerCase();
       if (type === 'ip') return itemType === 'ipv4' || itemType === 'ipv6';
       if (type === 'hash') return itemType === 'md5' || itemType === 'sha1' || itemType === 'sha256' || itemType === 'sha512';
+      if (type === 'crypto') return itemType === 'bitcoin' || itemType === 'ethereum';
       return itemType === type.toLowerCase();
     });
 
@@ -1250,36 +1262,6 @@ class SOCToolkit {
 
     this.copyToClipboard(values.join('\n'));
     this.showNotification(`Copied ${values.length} ${type}${values.length > 1 ? 's' : ''}`, 'success');
-  }
-
-  // Get IOC statistics
-  getIOCStats() {
-    const items = Array.from(document.querySelectorAll('.ioc-item:not(.empty-state)'));
-    const stats = {
-      total: items.length,
-      ipv4: 0,
-      ipv6: 0,
-      domain: 0,
-      url: 0,
-      email: 0,
-      hash: 0,
-      cve: 0
-    };
-
-    items.forEach(item => {
-      const typeEl = item.querySelector('.ioc-type');
-      if (!typeEl) return;
-      const type = typeEl.textContent.toLowerCase();
-      if (type === 'ipv4') stats.ipv4++;
-      else if (type === 'ipv6') stats.ipv6++;
-      else if (type === 'domain') stats.domain++;
-      else if (type === 'url') stats.url++;
-      else if (type === 'email') stats.email++;
-      else if (type === 'md5' || type === 'sha1' || type === 'sha256') stats.hash++;
-      else if (type === 'cve') stats.cve++;
-    });
-
-    return stats;
   }
 
   // Show keyboard shortcuts modal
@@ -1388,8 +1370,10 @@ class SOCToolkit {
     this.showNotification(`Cleared ${removedNotes} old notes, ${staleKeys.length} cache entries`, 'success');
   }
 
-  exportIOCs(format = 'csv') {
-    const iocs = Array.from(document.querySelectorAll('.ioc-item')).map(item => {
+  exportIOCs(format = 'csv', rows = null) {
+    // :not(.empty-state) — the no-results placeholder must not export as a blank row.
+    const items = rows || Array.from(document.querySelectorAll('.ioc-item:not(.empty-state)'));
+    const iocs = items.map(item => {
       const value = item.querySelector('.ioc-value')?.textContent.trim() || '';
       const type = item.querySelector('.ioc-type')?.textContent.trim() || '';
       return { value, type };
@@ -1643,7 +1627,7 @@ class SOCToolkit {
       this.copyToClipboard(mdLines.join('\n'));
       this.showNotification(`Copied ${mdLines.length} markdown links`, 'success');
     } else if (action === 'export') {
-      this.exportIOCs('csv'); // bulk default as CSV
+      this.exportIOCs('csv', selected); // bulk default as CSV
     } else if (action === 'osint') {
       selected.forEach(item => {
         const vtLink = item.querySelector('.osint-link[href*="virustotal.com"]');
@@ -1679,6 +1663,15 @@ class SOCToolkit {
           // Apply the theme
           this.applyTheme(this.currentTheme);
           this._applyGraphCollapsed();
+
+          // Checkboxes were bound with construction-time defaults; sync them
+          // to the restored state.
+          const autoAnalyzeToggle = document.getElementById('autoAnalyzeToggle');
+          if (autoAnalyzeToggle) autoAnalyzeToggle.checked = this.autoAnalyze;
+          const autoEnrichToggle = document.getElementById('autoEnrichToggle');
+          if (autoEnrichToggle) autoEnrichToggle.checked = this.autoEnrich;
+          const enableGraphToggle = document.getElementById('enableGraphToggle');
+          if (enableGraphToggle) enableGraphToggle.checked = this.enableGraph;
 
           // Set the theme selector value
           const themeSelect = document.getElementById('themeSelect');
@@ -1844,16 +1837,19 @@ class SOCToolkit {
     // Remove existing theme data attributes
     document.body.removeAttribute('data-theme');
 
-    // Handle system theme preference
+    // 'system' resolves against the OS preference for the body attribute,
+    // but currentTheme keeps the original choice so it persists and the
+    // select keeps showing it.
+    let applied = themeName;
     if (themeName === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       // Use arc for dark mode, coffee for light mode
-      themeName = prefersDark ? 'arc' : 'coffee';
+      applied = prefersDark ? 'arc' : 'coffee';
     }
 
     // Apply new theme (if not arc/default)
-    if (themeName !== 'arc') {
-      document.body.setAttribute('data-theme', themeName);
+    if (applied !== 'arc') {
+      document.body.setAttribute('data-theme', applied);
     }
 
     this.currentTheme = themeName;
@@ -1951,7 +1947,9 @@ class SOCToolkit {
       } else if (target.closest('.action-copy')) {
         this.copyToClipboard(snip.content || '');
       } else if (target.closest('.action-edit')) {
-        this.openSnippetEditor(idx);
+        // data-index is the position in the (possibly filtered) render list;
+        // resolve the real index so Save edits the shown snippet.
+        this.openSnippetEditor(this.snippets.indexOf(snip));
       } else if (target.closest('.action-delete')) {
         if (confirm(`Delete snippet "${snip.name || 'Untitled'}"?`)) {
           const realIndex = this.snippets.indexOf(snip);
@@ -2088,7 +2086,8 @@ class SOCToolkit {
         if (enrichBtn) {
           const item = enrichBtn.closest('.ioc-item');
           const type = this.normalizeEnrichType(item?.getAttribute('data-type'));
-          const value = item?.getAttribute('data-value') || '';
+          // data-value may hold the defanged display value; providers need the real one.
+          const value = this.fangText(item?.getAttribute('data-value') || '');
           if (type && value) this._batchEnrich(type, [value]);
           return;
         }
@@ -2105,7 +2104,7 @@ class SOCToolkit {
         const detailsBtn = e.target.closest('.row-details-btn');
         if (detailsBtn) {
           const item = detailsBtn.closest('.ioc-item');
-          const stored = item && this.enrichmentByIoc.get(item.dataset.value);
+          const stored = item && this.enrichmentByIoc.get(this.fangText(item.dataset.value));
           if (stored) this.showEnrichmentPanel(stored.result);
           return;
         }
@@ -2127,6 +2126,13 @@ class SOCToolkit {
       // Clear saved IOC input and last results from storage
       chrome.storage.local.remove(['savedIOCInput', 'lastAnalysisResults']);
     }
+
+    // Forget the case entirely: Ask AI and Enrich-remaining must never ship
+    // IOCs from a cleared analysis.
+    this.lastIOCs = null;
+    this.lastIOCInput = '';
+    this._enrichmentRemainder = {};
+    this._refreshEnrichRemainingItem();
 
     // Clear the graph visualization
     this.clearGraph();
@@ -2473,7 +2479,10 @@ class SOCToolkit {
         results.push({ type, value, category });
       }
     } else if (category === 'ip') {
-      if (this.isValidIP(value)) {
+      // isValidIP's IPv4 branch rejects mixed IPv6 (::ffff:1.2.3.4 contains
+      // dots); colon-bearing values go straight to the IPv6 validator.
+      const valid = value.includes(':') ? this.isValidIPv6(value) : this.isValidIP(value);
+      if (valid) {
         results.push({ type, value, category });
       }
     } else {
@@ -2939,7 +2948,7 @@ class SOCToolkit {
         // Reorder array: move src to position of dst
         const srcItem = this.customOsintSources.splice(srcIdx, 1)[0];
         // If source comes before destination and we removed it, destination index decreases by 1
-        const insertIndex = (srcIdx < dstIdx) ? dstIdx : dstIdx;
+        const insertIndex = (srcIdx < dstIdx) ? dstIdx - 1 : dstIdx;
         this.customOsintSources.splice(insertIndex, 0, srcItem);
         this.saveCustomOsintSources();
         this.displayCustomOsintSources();
@@ -4119,9 +4128,10 @@ function importSnippetsPreset(presetKey = 'internal', options = { merge: true })
         chrome.storage.local.get('snippets', (res) => {
           const existing = Array.isArray(res.snippets) ? res.snippets : [];
           const combined = options.merge ? existing.concat(normalized) : normalized;
-          chrome.storage.local.set({ snippets: combined }, () => {
-            // refresh the UI if toolkit exists
-            try { toolkit.displaySnippets(); } catch (e) { }
+          chrome.storage.local.set({ snippets: combined }, async () => {
+            // refresh the UI if toolkit exists — reload first, or the list
+            // renders from the stale in-memory array.
+            try { await toolkit.loadSnippets(); toolkit.displaySnippets(); } catch (e) { }
             try { toolkit.showNotification('Snippets imported', 'success'); } catch (e) { }
           });
         });
