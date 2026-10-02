@@ -211,7 +211,8 @@ class SOCToolkit {
   }
 
   extractIOCsFromText(text) {
-    const iocs = this.extractIOCs(text);
+    // Context-menu text never passes through analyzeIOCs; refang it here.
+    const iocs = this.extractIOCs(this.fangText(text));
     const iocText = iocs.map(ioc => ioc.value).join('\n');
 
     // Just display the IOCs, no automatic copy
@@ -1368,6 +1369,41 @@ class SOCToolkit {
 
     await this.updateStorageIndicator();
     this.showNotification(`Cleared ${removedNotes} old notes, ${staleKeys.length} cache entries`, 'success');
+  }
+
+  async loadAndShowPdnsAsnCache() {
+    const modal = document.getElementById('pdnsAsnCacheModal');
+    const list = document.getElementById('pdnsCacheList');
+    if (!modal || !list) return;
+
+    const all = await new Promise(resolve => chrome.storage.local.get(null, resolve));
+    const entries = Object.entries(all || {})
+      .filter(([key]) => key.startsWith('pdns_cache_') || key.startsWith('asn_cache_'))
+      .sort((a, b) => ((b[1] && b[1].timestamp) || 0) - ((a[1] && a[1].timestamp) || 0));
+
+    if (entries.length === 0) {
+      list.innerHTML = '<div>No cached entries</div>';
+    } else {
+      list.innerHTML = entries.map(([key, entry]) => {
+        const kind = key.startsWith('pdns_cache_') ? 'PDNS' : 'ASN';
+        const ioc = key.slice(key.indexOf('_cache_') + '_cache_'.length);
+        const age = this.formatCacheAge(entry && entry.timestamp);
+        const recordCount = Array.isArray(entry && entry.records) ? entry.records.length : 0;
+        const summary = kind === 'PDNS'
+          ? `${recordCount} record${recordCount === 1 ? '' : 's'}`
+          : [entry && entry.asn && entry.asn.number, entry && entry.asn && entry.asn.name].filter(Boolean).join(' — ') || 'no ASN data';
+        return `<div><b>${kind}</b> ${this.escapeHtml(ioc)} · ${this.escapeHtml(age)} · ${this.escapeHtml(summary)}</div>`;
+      }).join('');
+    }
+
+    modal.style.display = 'flex';
+  }
+
+  formatCacheAge(timestamp) {
+    if (typeof timestamp !== 'number') return 'unknown age';
+    const elapsed = Date.now() - timestamp;
+    if (elapsed < 3600000) return 'just now';
+    return `${Math.floor(elapsed / 3600000)}h ago`;
   }
 
   exportIOCs(format = 'csv', rows = null) {
