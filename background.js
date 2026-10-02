@@ -107,6 +107,15 @@ class RateLimiter {
 }
 const rateLimiter = new RateLimiter();
 
+// Concrete HTTP status → standardized errorCode. Thrown (network) fetch errors
+// keep NETWORK_ERROR at their call sites.
+function httpErrorCode(status) {
+  if (status === 401 || status === 403) return 'API_KEY_INVALID';
+  if (status === 429) return 'RATE_LIMIT_EXCEEDED';
+  if (status === 404) return 'NO_DATA';
+  return 'UNKNOWN_ERROR';
+}
+
 async function fetchWithBackoff(url, options = {}, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -122,14 +131,21 @@ async function fetchWithBackoff(url, options = {}, maxRetries = 3) {
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      // Attach the status so callers can classify (401/403/429/404) instead of
+      // reporting every HTTP failure as NETWORK_ERROR.
+      const httpErr = new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      httpErr.status = resp.status;
+      throw httpErr;
     } catch (err) {
       if (attempt === maxRetries - 1) throw err;
       const delay = Math.min(1000 * 2 ** attempt, 30000);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  throw new Error('fetchWithBackoff: exhausted retries');
+  // Reaching here means every attempt hit a 429 and fell through the loop.
+  const exhausted = new Error('fetchWithBackoff: exhausted retries');
+  exhausted.status = 429;
+  throw exhausted;
 }
 
 async function getCachedAgentResult(agentId, iocType, ioc) {
@@ -151,10 +167,25 @@ async function getCachedAgentResult(agentId, iocType, ioc) {
   return clone;
 }
 
+// AGENTS.md cap: keep only the newest maxEntries agent2_ cache entries.
+function agentCacheKeysToPrune(allStorageData, maxEntries = 1000) {
+  const entries = Object.entries(allStorageData || {})
+    .filter(([key]) => key.startsWith('agent2_'))
+    .map(([key, val]) => ({ key, timestamp: (val && val.timestamp) || 0 }));
+  if (entries.length <= maxEntries) return [];
+  entries.sort((a, b) => b.timestamp - a.timestamp);
+  return entries.slice(maxEntries).map((e) => e.key);
+}
+
 async function setCachedAgentResult(agentId, iocType, ioc, result) {
   const cacheKey = `agent2_${agentId}_${iocType}_${ioc}`;
   const payload = { ...result, timestamp: result.timestamp || Date.now() };
   await new Promise((resolve) => chrome.storage.local.set({ [cacheKey]: payload }, resolve));
+  const all = await new Promise((resolve) => chrome.storage.local.get(null, resolve));
+  const toPrune = agentCacheKeysToPrune(all);
+  if (toPrune.length) {
+    await new Promise((resolve) => chrome.storage.local.remove(toPrune, resolve));
+  }
 }
 
 function isValidIP(ip) {
@@ -531,7 +562,7 @@ async function fetchIpInfo(ip, apiKey) {
     const resp = await fetchWithBackoff(url, { headers });
     rateLimiter.recordRequest('ipinfo');
     if (!resp.ok) {
-      return { provider: 'ipinfo', displayName: 'ipinfo.io', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${resp.status}` };
+      return { provider: 'ipinfo', displayName: 'ipinfo.io', status: 'error', errorCode: httpErrorCode(resp.status), errorMessage: `HTTP ${resp.status}` };
     }
     const data = await resp.json();
     const nodes = [];
@@ -581,7 +612,7 @@ async function fetchIpInfo(ip, apiKey) {
       metadata: { ttlSeconds: 24 * 60 * 60, fetchedAt: Date.now() }
     };
   } catch (err) {
-    return { provider: 'ipinfo', displayName: 'ipinfo.io', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+    return { provider: 'ipinfo', displayName: 'ipinfo.io', status: 'error', errorCode: err.status ? httpErrorCode(err.status) : 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 
@@ -603,7 +634,7 @@ async function fetchAbuseIPDB(ip, apiKey) {
     const resp = await fetchWithBackoff(url, { headers: { Key: apiKey, Accept: 'application/json' } });
     rateLimiter.recordRequest('abuseipdb');
     if (!resp.ok) {
-      return { provider: 'abuseipdb', displayName: 'AbuseIPDB', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${resp.status}` };
+      return { provider: 'abuseipdb', displayName: 'AbuseIPDB', status: 'error', errorCode: httpErrorCode(resp.status), errorMessage: `HTTP ${resp.status}` };
     }
     const json = await resp.json();
     const data = json?.data || {};
@@ -637,7 +668,7 @@ async function fetchAbuseIPDB(ip, apiKey) {
       metadata: { ttlSeconds: 24 * 60 * 60, fetchedAt: Date.now() }
     };
   } catch (err) {
-    return { provider: 'abuseipdb', displayName: 'AbuseIPDB', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+    return { provider: 'abuseipdb', displayName: 'AbuseIPDB', status: 'error', errorCode: err.status ? httpErrorCode(err.status) : 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 
@@ -660,7 +691,9 @@ async function fetchIpAddressTo(ip) {
     ]);
     rateLimiter.recordRequest('ipaddressto');
     if (lookupRes.status !== 'fulfilled' || !lookupRes.value.ok) {
-      return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: lookupRes.status === 'rejected' ? lookupRes.reason.message : `HTTP ${lookupRes.value.status}` };
+      const rejected = lookupRes.status === 'rejected';
+      const status = rejected ? lookupRes.reason.status : lookupRes.value.status;
+      return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: status ? httpErrorCode(status) : 'NETWORK_ERROR', errorMessage: rejected ? lookupRes.reason.message : `HTTP ${lookupRes.value.status}` };
     }
     const lookup = await lookupRes.value.json();
     if (!lookup || lookup.success !== true) {
@@ -711,20 +744,21 @@ async function fetchVirusTotalIp(ip, apiKey) {
     const resp = await fetchWithBackoff(url, { headers: { 'x-apikey': apiKey, Accept: 'application/json' } });
     rateLimiter.recordRequest('virustotal');
     if (!resp.ok) {
-      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${resp.status}` };
+      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: httpErrorCode(resp.status), errorMessage: `HTTP ${resp.status}` };
     }
     const json = await resp.json();
     const attrs = json?.data?.attributes || {};
   const nodes = [];
   const edges = [];
   if (attrs.asn || attrs.as_owner) {
-    const asnNumber = attrs.asn || (attrs.network && attrs.network.asn);
+    const asnNumber = attrs.asn;
     const asnId = asnNumber ? `asn_${asnNumber}` : `asn_unknown_${ip.replace(/[.:]/g, '_')}`;
     nodes.push({
       id: asnId,
       label: attrs.asn ? `AS${attrs.asn}` : (attrs.as_owner || 'ASN'),
       type: 'asn',
-      properties: { owner: attrs.as_owner, network: attrs.network?.cidr, rir: attrs.network?.rir }
+      // network is a CIDR string and the RIR is a sibling attribute, not nested.
+      properties: { owner: attrs.as_owner, network: attrs.network, rir: attrs.regional_internet_registry }
     });
     edges.push({ id: `edge_${ip}_vtasn`, from: ip, to: asnId, label: 'belongs-to', properties: { source: 'virustotal' } });
   }
@@ -746,7 +780,7 @@ async function fetchVirusTotalIp(ip, apiKey) {
       metadata: { ttlSeconds: 24 * 60 * 60, fetchedAt: Date.now() }
     };
   } catch (err) {
-    return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+    return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: err.status ? httpErrorCode(err.status) : 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 
@@ -768,7 +802,7 @@ async function fetchVirusTotalFile(hash, apiKey) {
     const resp = await fetchWithBackoff(url, { headers: { 'x-apikey': apiKey, Accept: 'application/json' } });
     rateLimiter.recordRequest('virustotal');
     if (!resp.ok) {
-      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${resp.status}` };
+      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: httpErrorCode(resp.status), errorMessage: `HTTP ${resp.status}` };
     }
     const json = await resp.json();
     const attrs = json?.data?.attributes || {};
@@ -811,7 +845,7 @@ async function fetchVirusTotalFile(hash, apiKey) {
       metadata: { ttlSeconds: 7 * 24 * 60 * 60, fetchedAt: Date.now() }
     };
   } catch (err) {
-    return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+    return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: err.status ? httpErrorCode(err.status) : 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 
@@ -824,7 +858,7 @@ async function fetchMalwareBazaar(hash) {
       body: `query=get_info&hash=${encodeURIComponent(hash)}`
     });
     if (!resp.ok) {
-      return { provider: 'malwarebazaar', displayName: 'MalwareBazaar', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${resp.status}` };
+      return { provider: 'malwarebazaar', displayName: 'MalwareBazaar', status: 'error', errorCode: httpErrorCode(resp.status), errorMessage: `HTTP ${resp.status}` };
     }
     const json = await resp.json();
     if (json?.query_status === 'file_is_unknown') {
@@ -886,7 +920,7 @@ async function fetchMalwareBazaar(hash) {
       metadata: { ttlSeconds: 7 * 24 * 60 * 60, fetchedAt: Date.now() }
     };
   } catch (err) {
-    return { provider: 'malwarebazaar', displayName: 'MalwareBazaar', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+    return { provider: 'malwarebazaar', displayName: 'MalwareBazaar', status: 'error', errorCode: err.status ? httpErrorCode(err.status) : 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 
@@ -908,7 +942,7 @@ async function fetchVirusTotalDomain(domain, apiKey) {
     const resolutionsResp = await fetchWithBackoff(resolutionsUrl, { headers: { 'x-apikey': apiKey, Accept: 'application/json' } });
     rateLimiter.recordRequest('virustotal');
     if (!resolutionsResp.ok) {
-      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${resolutionsResp.status}` };
+      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: httpErrorCode(resolutionsResp.status), errorMessage: `HTTP ${resolutionsResp.status}` };
     }
     const resolutionsJson = await resolutionsResp.json();
     if (!rateLimiter.canMakeRequest('virustotal')) {
@@ -924,7 +958,7 @@ async function fetchVirusTotalDomain(domain, apiKey) {
     const detailsResp = await fetchWithBackoff(detailsUrl, { headers: { 'x-apikey': apiKey, Accept: 'application/json' } });
     rateLimiter.recordRequest('virustotal');
     if (!detailsResp.ok) {
-      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: `HTTP ${detailsResp.status}` };
+      return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: httpErrorCode(detailsResp.status), errorMessage: `HTTP ${detailsResp.status}` };
     }
     const detailsJson = await detailsResp.json();
     const attrs = detailsJson?.data?.attributes || {};
@@ -967,7 +1001,7 @@ async function fetchVirusTotalDomain(domain, apiKey) {
       metadata: { ttlSeconds: 7 * 24 * 60 * 60, fetchedAt: Date.now() }
     };
   } catch (err) {
-    return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+    return { provider: 'virustotal', displayName: 'VirusTotal', status: 'error', errorCode: err.status ? httpErrorCode(err.status) : 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 
@@ -1149,9 +1183,7 @@ async function fetchURLscan(url, apiKey) {
 
     if (!submitRes.ok) {
       const errBody = await submitRes.text().catch(() => '');
-      const errorCode = submitRes.status === 401 || submitRes.status === 403
-        ? 'API_KEY_INVALID' : submitRes.status === 429
-          ? 'RATE_LIMIT_EXCEEDED' : 'UNKNOWN_ERROR';
+      const errorCode = httpErrorCode(submitRes.status);
       return {
         provider, displayName, status: 'error', data: null, nodes: [], edges: [],
         errorMessage: `urlscan.io submission failed: HTTP ${submitRes.status}. ${errBody.slice(0, 120)}`,
@@ -1207,12 +1239,13 @@ async function fetchURLscan(url, apiKey) {
     if (pageDomain) {
       const domainId = `domain_${pageDomain.replace(/[^a-z0-9._-]/gi, '_')}`;
       nodes.push({ id: domainId, label: pageDomain, type: 'domain' });
-      edges.push({ from: url, to: domainId, label: 'resolves-to' });
+      // Edges need ids or runUrlAgent's dedupeById silently drops them.
+      edges.push({ id: `edge_${vtUrlId(url)}_domain`, from: url, to: domainId, label: 'resolves-to' });
     }
     if (pageIp) {
       const ipId = `ip_${pageIp.replace(/[^0-9a-fA-F.:]/g, '_')}`;
       nodes.push({ id: ipId, label: pageIp, type: 'ip' });
-      edges.push({ from: url, to: ipId, label: 'hosted-on' });
+      edges.push({ id: `edge_${vtUrlId(url)}_ip`, from: url, to: ipId, label: 'hosted-on' });
     }
 
     return {
@@ -1268,7 +1301,7 @@ async function fetchURLhaus(url) {
     if (!res.ok) {
       return {
         provider, displayName, status: 'error', data: null, nodes: [], edges: [],
-        errorMessage: `URLhaus returned HTTP ${res.status}`, errorCode: 'UNKNOWN_ERROR',
+        errorMessage: `URLhaus returned HTTP ${res.status}`, errorCode: httpErrorCode(res.status),
         apiUrl, metadata: { ttlSeconds: CACHE_TTL.url / 1000, fetchedAt: Date.now() }
       };
     }
@@ -1280,6 +1313,15 @@ async function fetchURLhaus(url) {
         provider, displayName, status: 'no_data',
         data: { queryStatus: 'not_found', threat: null, tags: [] },
         nodes: [], edges: [], cached: false,
+        apiUrl, metadata: { ttlSeconds: CACHE_TTL.url / 1000, fetchedAt: Date.now() }
+      };
+    }
+
+    // 'offline'/'invalid_url'/etc. must not render as a clean (threat:null) card.
+    if (data.query_status !== 'ok') {
+      return {
+        provider, displayName, status: 'error', data: null, nodes: [], edges: [],
+        errorMessage: `URLhaus query_status: ${data.query_status}`, errorCode: 'UNKNOWN_ERROR',
         apiUrl, metadata: { ttlSeconds: CACHE_TTL.url / 1000, fetchedAt: Date.now() }
       };
     }
@@ -1329,7 +1371,7 @@ async function fetchPhishTank(url) {
     if (!res.ok) {
       return {
         provider, displayName, status: 'error', data: null, nodes: [], edges: [],
-        errorMessage: `PhishTank returned HTTP ${res.status}`, errorCode: 'UNKNOWN_ERROR',
+        errorMessage: `PhishTank returned HTTP ${res.status}`, errorCode: httpErrorCode(res.status),
         apiUrl, metadata: { ttlSeconds: CACHE_TTL.url / 1000, fetchedAt: Date.now() }
       };
     }
@@ -1380,16 +1422,13 @@ async function fetchVirusTotalUrl(url, apiKey) {
 
   try {
     rateLimiter.recordRequest(provider);
-    const urlId = btoa(url).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const urlId = vtUrlId(url);
     const apiUrl = `https://www.virustotal.com/api/v3/urls/${urlId}`;
 
     const res = await fetch(apiUrl, { headers: { 'x-apikey': apiKey } });
 
     if (!res.ok) {
-      const errorCode = res.status === 401 || res.status === 403
-        ? 'API_KEY_INVALID' : res.status === 429
-          ? 'RATE_LIMIT_EXCEEDED' : res.status === 404
-            ? 'NO_DATA' : 'UNKNOWN_ERROR';
+      const errorCode = httpErrorCode(res.status);
       return {
         provider, displayName,
         status: res.status === 404 ? 'no_data' : 'error',
@@ -2369,6 +2408,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           return;
         }
 
+        // Same 4/min budget as the agent path; fall back to the web UI when spent.
+        if (!rateLimiter.canMakeRequest('virustotal')) {
+          openVirusTotalLookup(domain);
+          sendResponse({ fallback: 'web', opened: true, reason: 'rate_limited' });
+          return;
+        }
+        rateLimiter.recordRequest('virustotal');
+
         // Call VirusTotal Domain resolutions endpoint
         const url = `https://www.virustotal.com/api/v3/domains/${encodeURIComponent(domain)}/resolutions`;
         const resp = await fetch(url, { headers: { 'x-apikey': apiKey } });
@@ -2423,18 +2470,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         let asn = null;
         if (vtKey) {
           try {
+            // Same 4/min budget as the agent path; fall back to the web UI when spent.
+            if (!rateLimiter.canMakeRequest('virustotal')) {
+              openVirusTotalLookup(ip);
+              sendResponse({ fallback: 'web', opened: true, reason: 'rate_limited' });
+              return;
+            }
             const vtUrl = `https://www.virustotal.com/api/v3/ip_addresses/${encodeURIComponent(ip)}`;
+            rateLimiter.recordRequest('virustotal');
             const vtResp = await fetch(vtUrl, { headers: { 'x-apikey': vtKey } });
             if (vtResp.ok) {
               const vj = await vtResp.json();
               const attrs = (vj && vj.data && vj.data.attributes) || {};
-              // Attempt to extract ASN details
-              if (attrs.asn || attrs.as_owner || (attrs.network && attrs.network.asn)) {
-                const asnNumber = attrs.asn || (attrs.network && attrs.network.asn) || null;
-                const asnName = attrs.as_owner || (attrs.network && attrs.network.name) || null;
-                const prefix = (attrs.network && attrs.network.cidr) || null;
-                const registry = (attrs.network && attrs.network.rir) || null;
-                asn = { number: asnNumber ? `AS${asnNumber}` : null, name: asnName, prefix, registry };
+              // network is a CIDR string and the RIR is a sibling attribute.
+              if (attrs.asn || attrs.as_owner) {
+                asn = {
+                  number: attrs.asn ? `AS${attrs.asn}` : null,
+                  name: attrs.as_owner || null,
+                  prefix: attrs.network || null,
+                  registry: attrs.regional_internet_registry || null
+                };
               }
             }
           } catch (e) {
@@ -2453,17 +2508,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
           const j = await resp.json();
           if (j && j.org) {
+            // ipinfo returns neither announced prefix nor registry — don't fake
+            // them from the looked-up IP / country code.
             const m = j.org.match(/AS(\d+)\s*(.*)/);
             if (m) {
-              asn = { number: `AS${m[1]}`, name: (m[2] || '').trim(), prefix: j.ip || null, registry: j.country || null };
+              asn = { number: `AS${m[1]}`, name: (m[2] || '').trim(), prefix: null, registry: null };
             } else {
-              asn = { number: null, name: j.org, prefix: j.ip || null, registry: j.country || null };
+              asn = { number: null, name: j.org, prefix: null, registry: null };
             }
           }
         }
 
-        const cacheObj = { asn, timestamp: Date.now() };
-        chrome.storage.local.set({ [cachedKey]: cacheObj });
+        // Cache only hits: caching {asn:null} would blank ASN lookups for 24h
+        // after a single transient failure.
+        if (asn) {
+          const cacheObj = { asn, timestamp: Date.now() };
+          chrome.storage.local.set({ [cachedKey]: cacheObj });
+        }
         sendResponse({ asn });
       } catch (err) {
         console.error('ASN enrichment error:', err);
