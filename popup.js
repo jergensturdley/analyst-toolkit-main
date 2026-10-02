@@ -90,6 +90,9 @@ class SOCToolkit {
     this.snippets = [];
     this.autoAnalyze = true;
     this.floatMode = false;
+    this.navLayout = 'tabs';
+    this.osintLinksBackground = true;
+    this._floatWindowId = null;
     this.customOsintSources = [];
     this.enableGraph = true;
     this.iocGraph = null;
@@ -119,6 +122,15 @@ class SOCToolkit {
     // Version label reads from the manifest so it cannot drift from the release.
     const versionLabel = document.getElementById('versionLabel');
     if (versionLabel) versionLabel.textContent = `v${chrome.runtime.getManifest().version}`;
+
+    // The background opens the floating window at popup.html?float=1; the
+    // toolbar popup loads without a query string.
+    this.floatMode = new URLSearchParams(location.search).has('float');
+    if (this.floatMode && chrome.windows?.getCurrent) {
+      chrome.windows.getCurrent()
+        .then((win) => { if (win) this._floatWindowId = win.id; })
+        .catch(() => {});
+    }
 
     this.setupEventListeners();
     this.setupSystemThemeListener(); // Listen for system theme changes
@@ -613,14 +625,12 @@ class SOCToolkit {
     // Header controls
     el('floatBtn')?.addEventListener('click', () => this.toggleFloat());
     el('closeBtn')?.addEventListener('click', () => this.closeWindow());
+    this._setupResizeGrip();
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.key === 'Enter') this.analyzeIOCs();
-      if (e.key === 'Escape') {
-        this.clearIOCs();
-        this.hideKeyboardShortcuts();
-      }
+      if (e.key === 'Escape') this.handleEscapeKey();
       // Show keyboard shortcuts with ?
       if (e.key === '?' && !e.target.matches('input, textarea')) {
         e.preventDefault();
@@ -740,6 +750,26 @@ class SOCToolkit {
     el('themeSelect')?.addEventListener('change', (e) => {
       this.currentTheme = e.target.value;
       this.applyTheme(this.currentTheme);
+      this.saveSettings();
+    });
+
+    // Window & Layout: OSINT link background preference
+    el('osintLinksBackgroundToggle')?.addEventListener('change', (e) => {
+      this.osintLinksBackground = e.target.checked;
+      this.saveSettings();
+    });
+
+    // Window & Layout: navigation layout radios
+    el('navLayoutTabs')?.addEventListener('change', (e) => {
+      if (!e.target.checked) return;
+      this.navLayout = 'tabs';
+      this.applyWindowLayout();
+      this.saveSettings();
+    });
+    el('navLayoutSidebar')?.addEventListener('change', (e) => {
+      if (!e.target.checked) return;
+      this.navLayout = 'sidebar';
+      this.applyWindowLayout();
       this.saveSettings();
     });
 
@@ -985,6 +1015,16 @@ class SOCToolkit {
     });
     document.addEventListener('click', () => {
       document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+    });
+
+    // OSINT links: plain left-clicks go through tabs.create so the popup is
+    // not blurred closed; modifier/middle clicks keep native browser behavior.
+    document.addEventListener('click', (e) => {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      const a = e.target?.closest?.('a[target="_blank"]');
+      if (!a || !a.href) return;
+      e.preventDefault();
+      chrome.tabs.create({ url: a.href, active: !this.osintLinksBackground });
     });
   }
 
@@ -1278,6 +1318,25 @@ class SOCToolkit {
     if (modal) {
       modal.style.display = 'none';
     }
+  }
+
+  // Esc in the toolbar popup clears the analysis; in the floating window it
+  // closes the window unless a modal is open (the consent modal handles its
+  // own Esc through a capture listener).
+  handleEscapeKey() {
+    if (!this.floatMode) {
+      this.clearIOCs();
+      this.hideKeyboardShortcuts();
+      return;
+    }
+    const shortcuts = document.getElementById('keyboardShortcutsModal');
+    if (shortcuts && shortcuts.style.display === 'flex') {
+      this.hideKeyboardShortcuts();
+      return;
+    }
+    const consent = document.getElementById('consentModal');
+    if (consent && consent.style.display === 'flex') return;
+    this.closeWindow();
   }
 
   // Get storage usage info
@@ -1667,7 +1726,7 @@ class SOCToolkit {
     } else if (action === 'osint') {
       selected.forEach(item => {
         const vtLink = item.querySelector('.osint-link[href*="virustotal.com"]');
-        if (vtLink) window.open(vtLink.href, '_blank');
+        if (vtLink) chrome.tabs.create({ url: vtLink.href, active: !this.osintLinksBackground });
       });
     }
   }
@@ -1696,9 +1755,12 @@ class SOCToolkit {
           this.graphCollapsed = s.graphCollapsed ?? false;
           this.linksExpanded = s.linksExpanded ?? false;
           this.currentTheme = s.theme ?? 'arc';
+          this.osintLinksBackground = s.osintLinksBackground ?? true;
+          this.navLayout = s.navLayout === 'sidebar' ? 'sidebar' : 'tabs';
           // Apply the theme
           this.applyTheme(this.currentTheme);
           this._applyGraphCollapsed();
+          this.applyWindowLayout();
 
           // Checkboxes were bound with construction-time defaults; sync them
           // to the restored state.
@@ -1708,6 +1770,12 @@ class SOCToolkit {
           if (autoEnrichToggle) autoEnrichToggle.checked = this.autoEnrich;
           const enableGraphToggle = document.getElementById('enableGraphToggle');
           if (enableGraphToggle) enableGraphToggle.checked = this.enableGraph;
+          const osintLinksBackgroundToggle = document.getElementById('osintLinksBackgroundToggle');
+          if (osintLinksBackgroundToggle) osintLinksBackgroundToggle.checked = this.osintLinksBackground;
+          const navLayoutTabsRadio = document.getElementById('navLayoutTabs');
+          if (navLayoutTabsRadio) navLayoutTabsRadio.checked = this.navLayout === 'tabs';
+          const navLayoutSidebarRadio = document.getElementById('navLayoutSidebar');
+          if (navLayoutSidebarRadio) navLayoutSidebarRadio.checked = this.navLayout === 'sidebar';
 
           // Set the theme selector value
           const themeSelect = document.getElementById('themeSelect');
@@ -1826,7 +1894,9 @@ class SOCToolkit {
           graphCollapsed: this.graphCollapsed,
           linksExpanded: this.linksExpanded,
           enableGraph: this.enableGraph,
-          theme: this.currentTheme
+          theme: this.currentTheme,
+          navLayout: this.navLayout,
+          osintLinksBackground: this.osintLinksBackground
         });
         chrome.storage.local.set({ socSettings });
       });
@@ -2774,6 +2844,68 @@ class SOCToolkit {
   }
 
   // === Window controls ===
+  // Single reconciler for layout-affecting body classes.
+  applyWindowLayout() {
+    document.body.classList.toggle('floating', this.floatMode);
+    document.body.classList.toggle('nav-sidebar', this.navLayout === 'sidebar');
+  }
+
+  clampWindowSize(width, height, minW = 380, minH = 420, maxW = 2400, maxH = 1600) {
+    const clamp = (v, min, max) => Math.min(max, Math.max(min, Math.round(Number(v) || 0)));
+    return { width: clamp(width, minW, maxW), height: clamp(height, minH, maxH) };
+  }
+
+  // Drag grip that resizes the floating window. Geometry is persisted by the
+  // background's onBoundsChanged listener — Firefox lacks it, so size is
+  // simply not remembered there.
+  _setupResizeGrip() {
+    const grip = document.getElementById('floatResizeGrip');
+    if (!grip || !this.floatMode) return;
+    let dragging = false;
+    let startX = 0, startY = 0, startW = 0, startH = 0;
+    let inFlight = null;
+    let lastTarget = null;
+    const applySize = (width, height) => {
+      if (inFlight) { lastTarget = { width, height }; return; }
+      inFlight = Promise.resolve(chrome.windows?.update(this._floatWindowId, { width, height }))
+        .catch(() => {})
+        .finally(() => {
+          inFlight = null;
+          // Moves that arrived mid-flight are coalesced into one final update.
+          if (dragging && lastTarget) {
+            const { width: w, height: h } = lastTarget;
+            lastTarget = null;
+            applySize(w, h);
+          }
+        });
+    };
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = window.innerWidth;
+      startH = window.innerHeight;
+      try { grip.setPointerCapture(e.pointerId); } catch (err) { /* best-effort */ }
+      e.preventDefault();
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const { width, height } = this.clampWindowSize(
+        startW + (e.clientX - startX),
+        startH + (e.clientY - startY)
+      );
+      applySize(width, height);
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { grip.releasePointerCapture(e.pointerId); } catch (err) { /* not captured */ }
+    };
+    grip.addEventListener('pointerup', endDrag);
+    grip.addEventListener('pointercancel', endDrag);
+  }
+
   async toggleFloat() {
     try {
       const response = await chrome.runtime.sendMessage({ action: 'toggleFloat' });

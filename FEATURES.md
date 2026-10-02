@@ -161,6 +161,22 @@ Individual buttons for:
 - Color-coded IOC badges
 - Themed OSINT links
 
+## 🪟 Floating Window & Layout
+
+### Floating Window
+- Open the toolkit in a persistent window from the header button or Settings → Window & Layout
+- Fluid sizing: the UI fills whatever size you resize the window to
+- Drag the bottom-right grip to resize the window
+- Esc closes the floating window (in the toolbar popup, Esc clears the analysis); an open dialog takes precedence
+- Position and size are remembered between sessions on Chrome (Firefox reopens at the default geometry)
+
+### Navigation Layout
+- Tabs across the top (default) or a sidebar rail on the left — choose in Settings → Window & Layout
+
+### OSINT Links
+- Links open in a background tab so the window stays open; toggle in Settings → Window & Layout
+- Middle-click and Ctrl/Cmd/Shift/Alt-click keep normal browser behavior
+
 ## 🔒 Privacy & Security
 
 ### Local Processing

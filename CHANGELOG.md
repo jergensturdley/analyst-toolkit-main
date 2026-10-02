@@ -33,6 +33,9 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
 ### Added
 - Offline behavior tests now run the real `popup.js` and `background.js` in Node VM sandboxes (`tests/verify_popup.js`, `tests/verify_background.js`) instead of testing only a parser mock
+- OSINT links open in a background tab so the toolkit window stays open for the rest of the triage; a new "Window & Layout" setting controls this, and middle/Ctrl/Cmd/Shift/Alt-clicks keep normal browser behavior (the bulk "Open in VirusTotal" action follows the same setting)
+- The floating window sizes fluidly (the UI fills whatever size you drag the window to), gains a drag-to-resize grip in its bottom-right corner, and closes with Esc (Esc still clears the analysis in the toolbar popup; an open dialog takes precedence)
+- Optional sidebar navigation: "Window & Layout" in Settings offers tabs across the top (default) or a vertical rail on the left
 
 ## [0.5.5] - 2026-09-30
 

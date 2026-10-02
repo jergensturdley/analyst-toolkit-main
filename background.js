@@ -2614,7 +2614,7 @@ async function handleFloatingWindow(sendResponse) {
     // worker may have restarted since the bounds were recorded).
     await loadFloatingWindowState();
     const window = await chrome.windows.create({
-      url: chrome.runtime.getURL('popup.html'),
+      url: chrome.runtime.getURL('popup.html?float=1'),
       type: 'popup',
       width: floatingWindowState.width,
       height: floatingWindowState.height,
