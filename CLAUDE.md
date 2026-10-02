@@ -11,8 +11,8 @@ There is no build/bundle step. A `package.json` exists but only to pull in Playw
 ## Commands
 
 ```bash
-# Run the offline feature/parsing test suite (Node, ~no setup)
-node tests/verify_features.js
+# Run the offline test suites (Node, ~no setup)
+npm test   # tests/verify_features.js + tests/verify_popup.js + tests/verify_background.js
 
 # Build store packages (clean tree required)
 #   scripts/build-store-package.sh            → dist/soc-analyst-toolkit-<v>.zip (Chrome)
@@ -32,7 +32,7 @@ node tests/verify_features.js
 # Changes are picked up via the service-worker reload button; popup.js/html edits require closing+reopening the popup.
 ```
 
-No linter, formatter, or bundler is configured. Tests live only in `tests/verify_features.js` and use a hand-rolled `SOCToolkitMock` — not the production class.
+No linter, formatter, or bundler is configured. `tests/verify_features.js` regex-tests a hand-rolled `SOCToolkitMock`; `tests/verify_popup.js` and `tests/verify_background.js` load the real `popup.js`/`background.js` into Node `vm` sandboxes (through `tests/popup_harness.js` and `tests/background_harness.js`) with DOM/chrome/fetch stubs, so behavior tests run against production code. Prefer the harness suites for new behavior tests.
 
 ## File map
 
@@ -43,9 +43,11 @@ No linter, formatter, or bundler is configured. Tests live only in `tests/verify
 | `background.js` | MV3 service worker. Owns cross-origin fetch (popup can't fetch directly), `RateLimiter` (background.js:51), cache I/O, the central `chrome.runtime.onMessage` router (background.js:2199), context menus, notifications |
 | `content.js` | Injected **on demand** via `chrome.scripting.executeScript` (`ensureContentScript` in background.js) — there is no `content_scripts` block in the manifest, so it is not auto-injected into every page. Handles `copyToClipboard`, `toggleSnippets`, `highlightIOCs`, `getSelectedText`, page-snippet UI. Listens via its own `chrome.runtime.onMessage` (content.js:16) |
 | `tlds.js` | TLD allow-list used for domain extraction |
-| `vis-network.min.js` | Vendored graph viz library (the popup's IOC graph) |
+| `vis-network.js` | Vendored graph viz library (the popup's IOC graph) |
 | `css/`, `icons/`, `webfonts/` | Static assets for the popup UI |
-| `tests/verify_features.js` | Node-based IOC parser/regex smoke tests |
+| `tests/verify_features.js` | Node-based IOC parser/regex smoke tests against the `SOCToolkitMock` |
+| `tests/popup_harness.js` / `tests/verify_popup.js` | VM loader for the real `popup.js` and the behavior tests that drive it (dedupe, IPv6 extraction, row actions, settings, snippets, export) |
+| `tests/background_harness.js` / `tests/verify_background.js` | VM loader for the real `background.js` (fetch-stubbed) and the enrichment-agent tests (error taxonomy, VT shapes, URLhaus status, cache eviction, rate budget) |
 | `AGENTS.md` | Enrichment-agent design doc (architecture, rate limits, caching, per-IOC-type agent specs) — read before touching enrichment code |
 | `FEATURES.md`, `UPGRADE_GUIDE.md`, `CHANGELOG.md` | User-facing/upgrade docs |
 | `docs/superpowers/` | Design specs and implementation plans (e.g. Ask AI + QA/security/UX work) — current planned-but-not-shipped work lives here |

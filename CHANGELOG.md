@@ -2,6 +2,38 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+**IOC parsing**
+- Duplicate IOCs no longer reach the results list, statistics, graph, exports or the Ask-AI prompt; the dedupe button's "removed" count no longer counts blank lines
+- Compressed and IPv4-mapped IPv6 addresses extract whole (`2001:db8::1` was truncated to `2001:db8::`, `::ffff:192.168.1.1` mangled to `::ffff:192`)
+- The context-menu "Extract IOCs" action now refangs defanged text before extraction, matching the popup path
+
+**Popup**
+- Restored settings now show their saved state on the Auto-Analyze, Auto-Enrich and Graph toggles
+- Row Enrich and Details use the refanged value after a row is defanged, so providers are no longer queried with `192[.]168[.]1[.]1`
+- Ask AI no longer ships the previous case's IOCs after Clear, and "Enrich remaining" no longer re-sends IOCs from an earlier analysis
+- "Export Selected" exports only the selected rows, and exporting an empty list no longer downloads a blank row
+- Snippet Edit no longer overwrites the wrong snippet when the list is filtered, and importing snippets refreshes the list immediately
+- The "System" theme persists as a choice and keeps following the OS preference; "Copy Crypto" works; downward drags in the custom OSINT list land on the drop target; Select All resets on re-analysis
+
+**Enrichment (background)**
+- urlscan.io edges appear in the IOC graph again instead of being dropped for lack of ids
+- HTTP 401/403 and 429 report as invalid key and rate limit instead of a generic network error across all providers
+- VirusTotal ASN nodes carry the announced prefix and registry; URLs with non-latin1 characters no longer fail VirusTotal lookups
+- A URLhaus outage reports as an error instead of a clean lookup; the ipinfo ASN fallback stops mislabeling the IP and country as prefix and registry
+- A transient ASN miss is no longer cached for 24 hours, the enrichment cache prunes to 1000 entries, and the passive-DNS/ASN context-menu lookups share the VirusTotal rate budget
+
+**Other**
+- Page IOC highlighting applies to every match instead of stopping after the first
+- The store-package verifier no longer demands files the build intentionally omits
+- Version labels aligned at 0.5.5 across manifest, package.json, popup fallback and store listing
+
+### Added
+- Offline behavior tests now run the real `popup.js` and `background.js` in Node VM sandboxes (`tests/verify_popup.js`, `tests/verify_background.js`) instead of testing only a parser mock
+
 ## [0.5.5] - 2026-09-30
 
 ### Added
