@@ -60,8 +60,12 @@ function makeStorageArea() {
   return {
     get(keys, cb) {
       const result = {};
-      for (const k of Array.isArray(keys) ? keys : [keys]) {
-        if (k in data) result[k] = data[k];
+      if (keys === null || keys === undefined) {
+        Object.assign(result, data);
+      } else {
+        for (const k of Array.isArray(keys) ? keys : [keys]) {
+          if (k in data) result[k] = data[k];
+        }
       }
       if (typeof cb === 'function') return cb(result);
       return Promise.resolve(result);

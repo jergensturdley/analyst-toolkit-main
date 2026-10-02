@@ -389,6 +389,46 @@ async function main() {
     assert.strictEqual(selectAll.checked, false, 'Select All must reset when rows render unchecked');
   });
 
+  await test('loadAndShowPdnsAsnCache lists entries and opens the modal', async () => {
+    const now = Date.now();
+    storage.set({
+      'pdns_cache_evil.com': { provider: 'virustotal', records: [{ ip: '1.2.3.4' }, { ip: '5.6.7.8' }], timestamp: now - 2 * 3600000 },
+      'asn_cache_8.8.8.8': { asn: { number: 'AS15169', name: 'GOOGLE' }, timestamp: now },
+      'pdns_cache_evil&co.example': { records: [], timestamp: now },
+    });
+    await toolkit.loadAndShowPdnsAsnCache();
+    const modal = document.getElementById('pdnsAsnCacheModal');
+    const list = document.getElementById('pdnsCacheList');
+    assert.strictEqual(modal.style.display, 'flex', 'modal must be shown');
+    const html = list.innerHTML;
+    assert.ok(html.includes('PDNS') && html.includes('evil.com'), 'pdns entry missing: ' + html);
+    assert.ok(html.includes('2 records'), 'record count missing: ' + html);
+    assert.ok(html.includes('2h ago'), 'pdns age missing: ' + html);
+    assert.ok(html.includes('ASN') && html.includes('8.8.8.8'), 'asn entry missing: ' + html);
+    assert.ok(html.includes('AS15169') && html.includes('GOOGLE'), 'asn summary missing: ' + html);
+    assert.ok(html.includes('just now'), 'asn age missing: ' + html);
+    assert.ok(html.includes('evil&amp;co.example') && !html.includes('evil&co.example'),
+      'IOC value must be escaped: ' + html);
+    storage.remove(['pdns_cache_evil.com', 'asn_cache_8.8.8.8', 'pdns_cache_evil&co.example']);
+  });
+
+  await test('loadAndShowPdnsAsnCache shows the empty message when nothing is cached', async () => {
+    await toolkit.loadAndShowPdnsAsnCache();
+    const list = document.getElementById('pdnsCacheList');
+    assert.ok(/No cached entries/.test(list.innerHTML), 'empty message missing: ' + list.innerHTML);
+    assert.strictEqual(document.getElementById('pdnsAsnCacheModal').style.display, 'flex');
+  });
+
+  await test('extractIOCsFromText refangs defanged input before extraction', () => {
+    toolkit.autoAnalyze = false;
+    toolkit.extractIOCsFromText('hxxps://evil[.]example[.]com/login from 185.220.101.34');
+    const value = document.getElementById('iocInput').value;
+    assert.ok(value.includes('https://evil.example.com/login'), 'URL missing: ' + JSON.stringify(value));
+    assert.ok(value.includes('185.220.101.34'), 'IP missing: ' + JSON.stringify(value));
+    document.getElementById('iocInput').value = '';
+    storage.remove(['lastAnalysisResults', 'savedIOCInput']);
+  });
+
   console.log('\nTest Summary:');
   console.log('  Passed:', passed);
   console.log('  Failed:', failed);
