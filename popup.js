@@ -2389,7 +2389,9 @@ class SOCToolkit {
     }
 
     ta.value = unique.join('\n');
-    this.showNotification(`Removed ${lines.length - unique.length} duplicate(s)`, 'success');
+    // Dropped blank lines are cleanup, not removed duplicates
+    const removed = lines.filter(line => line.trim()).length - unique.length;
+    this.showNotification(`Removed ${removed} duplicate(s)`, 'success');
     if (this.autoAnalyze) {
       this.analyzeIOCs();
     }
@@ -2459,7 +2461,7 @@ class SOCToolkit {
     this._extractHashes(text, results);
     this._extractDomains(text, results);
 
-    return results;
+    return this._dedupeResults(results);
   }
 
   _addResult(results, type, value, category) {
@@ -2572,6 +2574,17 @@ class SOCToolkit {
         this._addResult(results, 'Domain', lower, 'domain');
         existing.add(lower);
       }
+    });
+  }
+
+  _dedupeResults(results) {
+    // Dedupe lives here so every consumer (list, stats, graph, exports, Ask-AI prompt) sees one row per IOC.
+    const seen = new Set();
+    return results.filter(r => {
+      const key = r.value.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
   }
 
