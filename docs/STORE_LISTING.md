@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — SOC Analyst Toolkit
 
-Store copy reflecting v0.5.4. Host lists and permission names match
+Store copy reflecting v0.5.5. Host lists and permission names match
 `manifest.json` exactly; update both together on any permission change.
 
 ## Store Metadata
@@ -197,6 +197,7 @@ This extension does not load or execute any remote code. All logic runs locally 
 
 | Version | Date | Notes |
 |---|---|---|
+| 0.5.5 | 2026-09-30 | Live IOC results search box; expand/collapse-all-links choice remembered; toggle-state, version-label and packaging fixes |
 | 0.5.4 | 2026-09-21 | Opt-in auto-enrichment (first 5 per type), verdict chips with inline enrichment summaries, single grouped Actions menu, enrichment panel close, collapsible IOC relation graph |
 | 0.5.3 | 2026-09-09 | IPAddress.to enrichment source and OSINT link; GreyNoise removed (service discontinued); per-field copy buttons on enrichment cards |
 | 0.5.2 | 2026-08-14 | Firefox (AMO) support; floating-window and snippet fixes; settings merge fix |

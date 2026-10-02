@@ -38,14 +38,12 @@ REQUIRED=(
   popup.html
   triage_prompt.js
   tlds.js
-  vis-network.min.js
+  vis-network.js
   icons/icon16.png
   icons/icon32.png
   icons/icon48.png
   icons/icon128.png
-  README.md
   LICENSE
-  CHANGELOG.md
 )
 for f in "${REQUIRED[@]}"; do
   if [ ! -e "$TMP/$f" ]; then
