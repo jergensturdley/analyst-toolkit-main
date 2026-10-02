@@ -5,7 +5,7 @@ const vm = require('vm');
 const path = require('path');
 
 function stubEl(id) {
-  return {
+  const el = {
     id,
     value: '',
     textContent: '',
@@ -15,32 +15,44 @@ function stubEl(id) {
     checked: false,
     dataset: {},
     classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-    addEventListener() {},
-    removeEventListener() {},
-    setAttribute() {},
-    getAttribute() { return null; },
-    removeAttribute() {},
+    _listeners: {},
+    _attrs: {},
+    addEventListener(type, fn) { el._listeners[type] = fn; },
+    removeEventListener(type) { delete el._listeners[type]; },
+    setAttribute(k, v) { el._attrs[k] = String(v); },
+    getAttribute(k) { return k in el._attrs ? el._attrs[k] : null; },
+    removeAttribute(k) { delete el._attrs[k]; },
     appendChild() {},
-    querySelector() { return null; },
-    querySelectorAll() { return []; },
+    click() {},
+    querySelector(sel) { return (el._qs && el._qs[sel]) || null; },
+    querySelectorAll(sel) { return (el._qsa && el._qsa[sel]) || []; },
+    // Test hooks: pin querySelector(All) results to this element.
+    __setQuerySelector(sel, target) { (el._qs = el._qs || {})[sel] = target; },
+    __setQuerySelectorAll(sel, targets) { (el._qsa = el._qsa || {})[sel] = targets; },
     focus() {},
     select() {},
     remove() {},
   };
+  return el;
 }
 
 function makeDocument() {
   const elements = {};
-  return {
+  const bySelector = {};
+  const bySelectorAll = {};
+  const doc = {
     readyState: 'complete',
     getElementById(id) { return (elements[id] = elements[id] || stubEl(id)); },
-    querySelector() { return null; },
-    querySelectorAll() { return []; },
-    createElement(tag) { return stubEl(tag); },
+    querySelector(sel) { return bySelector[sel] || null; },
+    querySelectorAll(sel) { return bySelectorAll[sel] || []; },
+    __setQuerySelector(sel, el) { bySelector[sel] = el; },
+    __setQuerySelectorAll(sel, els) { bySelectorAll[sel] = els; },
+    createElement(tag) { return (doc.__lastCreated = stubEl(tag)); },
     addEventListener() {},
     body: stubEl('body'),
     documentElement: stubEl('html'),
   };
+  return doc;
 }
 
 function makeStorageArea() {
@@ -94,6 +106,12 @@ async function loadPopupToolkit(root) {
   sandbox.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
   sandbox.requestAnimationFrame = (cb) => setTimeout(cb, 0);
   sandbox.MutationObserver = class { observe() {} disconnect() {} };
+  // Minimal DOM APIs popup.js touches on export/import paths.
+  sandbox.Blob = class { constructor(parts, opts) { this.parts = parts; this.type = opts && opts.type; } };
+  sandbox.URL = { createObjectURL: () => 'blob:harness', revokeObjectURL() {} };
+  sandbox.FileReader = class {
+    readAsText(file) { if (this.onload) this.onload({ target: { result: file && file.__text } }); }
+  };
   vm.createContext(sandbox);
 
   vm.runInContext(src, sandbox, { filename: 'popup.js' });
@@ -118,7 +136,7 @@ async function loadPopupToolkit(root) {
     // keep production's own fallback set
   }
 
-  return { toolkit, document };
+  return { toolkit, document, storage: storageArea, globals: sandbox };
 }
 
 module.exports = { loadPopupToolkit };
