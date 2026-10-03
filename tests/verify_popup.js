@@ -7,6 +7,7 @@
  */
 
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const { loadPopupToolkit } = require('./popup_harness.js');
 
@@ -696,6 +697,210 @@ async function main() {
     for (const id of ['sidePanelBtn', 'sidePanelRow', 'actionOpensPanelRow']) {
       assert.strictEqual(ffKit.document.getElementById(id).style.display, 'none', id + ' must hide');
     }
+  });
+
+  console.log('\n--- tools tab ---');
+
+  const textTool = (id) => {
+    const tool = toolkit.TEXT_TOOLS && toolkit.TEXT_TOOLS.find(t => t.id === id);
+    assert.ok(tool, 'TEXT_TOOLS must define ' + id);
+    return tool;
+  };
+  const makeTab = (id) => {
+    const classes = new Set();
+    return {
+      id,
+      style: {},
+      classList: {
+        toggle(name, force) {
+          const on = force === undefined ? !classes.has(name) : Boolean(force);
+          if (on) classes.add(name); else classes.delete(name);
+        },
+        contains: (name) => classes.has(name),
+      },
+    };
+  };
+
+  await test('TEXT_TOOLS base64 encode/decode round-trips unicode input', async () => {
+    const sample = 'héllo wörld ✓ 日本語';
+    const encoded = await textTool('base64_encode').fn(sample);
+    assert.notStrictEqual(encoded, sample, 'sample must actually be encoded');
+    assert.strictEqual(await textTool('base64_decode').fn(encoded), sample);
+  });
+
+  await test('TEXT_TOOLS defang/refang round-trips URLs and emails', async () => {
+    const sample = 'https://evil.example.com/login?a=b user@evil.example.com';
+    const defanged = await textTool('defang').fn(sample);
+    assert.ok(defanged.includes('hxxps://') && defanged.includes('[.]'), defanged);
+    assert.strictEqual(await textTool('refang').fn(defanged), sample);
+  });
+
+  await test('TEXT_TOOLS sha1/sha256 of "abc" match the known digests', async () => {
+    assert.strictEqual(await textTool('sha256_text').fn('abc'),
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    assert.strictEqual(await textTool('sha1_text').fn('abc'),
+      'a9993e364706816aba3e25717850c26c9cd0d89d');
+  });
+
+  await test('TEXT_TOOLS jwt_decode pretty-prints header and payload', async () => {
+    const b64url = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const token = `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url({ sub: '1234567890', name: 'John Doe', iat: 1516239022 })}.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c`;
+    const out = await textTool('jwt_decode').fn(token);
+    assert.ok(/Header:/.test(out) && /Payload:/.test(out), out);
+    assert.ok(out.includes('"alg": "HS256"'), out);
+    assert.ok(out.includes('"name": "John Doe"'), out);
+    await assert.rejects(() => textTool('jwt_decode').fn('not-a-jwt'), /JWT/);
+  });
+
+  await test('TEXT_TOOLS unix_to_utc auto-detects seconds and milliseconds', async () => {
+    assert.strictEqual(await textTool('unix_to_utc').fn('1700000000'), '2023-11-14T22:13:20.000Z');
+    assert.strictEqual(await textTool('unix_to_utc').fn('1700000000000'), '2023-11-14T22:13:20.000Z');
+  });
+
+  await test('TEXT_TOOLS utc_to_unix emits both seconds and milliseconds', async () => {
+    const out = await textTool('utc_to_unix').fn('2023-11-14T22:13:20Z');
+    assert.ok(out.includes('1700000000'), out);
+    assert.ok(out.includes('1700000000000'), out);
+  });
+
+  await test('TEXT_TOOLS rot13 round-trips and leaves non-letters alone', async () => {
+    const sample = 'Attack at Dawn! 123';
+    const once = await textTool('rot13').fn(sample);
+    assert.strictEqual(once, 'Nggnpx ng Qnja! 123');
+    assert.strictEqual(await textTool('rot13').fn(once), sample);
+  });
+
+  await test('runTextTool surfaces a decode error instead of throwing', async () => {
+    document.getElementById('transformInput').value = '!!!';
+    document.getElementById('transformOp').value = 'base64_decode';
+    await toolkit.runTextTool();
+    const errorEl = document.getElementById('transformError');
+    assert.ok(errorEl.textContent.length > 0, 'error message must be shown');
+    assert.strictEqual(errorEl.style.display, 'block', 'error must be visible');
+    assert.strictEqual(document.getElementById('transformOutput').textContent, '');
+  });
+
+  await test('runTextTool renders output and clears a previous error on success', async () => {
+    document.getElementById('transformInput').value = 'a<b>&c';
+    document.getElementById('transformOp').value = 'base64_encode';
+    await toolkit.runTextTool();
+    const errorEl = document.getElementById('transformError');
+    assert.strictEqual(errorEl.textContent, '');
+    assert.strictEqual(errorEl.style.display, 'none');
+    assert.ok(document.getElementById('transformOutput').textContent.length > 0);
+  });
+
+  await test('runRegex returns matches with index and capture groups', () => {
+    const r = toolkit.runRegex('(\\w+)@(\\w+\\.com)', 'g', 'mail foo@bar.com and baz@qux.com end');
+    assert.strictEqual(r.error, null);
+    assert.strictEqual(r.matches.length, 2);
+    assert.strictEqual(r.matches[0].text, 'foo@bar.com');
+    assert.strictEqual(r.matches[0].index, 5);
+    assert.strictEqual(r.matches[0].groups.length, 2);
+    assert.strictEqual(r.matches[0].groups[0], 'foo');
+    assert.strictEqual(r.matches[0].groups[1], 'bar.com');
+    assert.strictEqual(r.matches[1].text, 'baz@qux.com');
+    assert.strictEqual(r.matches[1].index, 21);
+  });
+
+  await test('runRegex reports invalid patterns without throwing', () => {
+    const r = toolkit.runRegex('[unclosed', 'g', 'sample text');
+    assert.strictEqual(r.matches.length, 0);
+    assert.ok(typeof r.error === 'string' && r.error.length > 0, 'expected an error string');
+  });
+
+  await test('unfurlUrl decodes encoded query parameter values', () => {
+    const u = toolkit.unfurlUrl('https://example.com:8443/a/b.php?x=1%20plus&q=a%26b%3Dc#frag');
+    assert.strictEqual(u.error, null);
+    assert.strictEqual(u.parts.scheme, 'https');
+    assert.strictEqual(u.parts.host, 'example.com');
+    assert.strictEqual(u.parts.port, '8443');
+    assert.strictEqual(u.parts.path, '/a/b.php');
+    assert.strictEqual(u.parts.fragment, 'frag');
+    assert.strictEqual(u.params.find((p) => p[0] === 'x')[1], '1 plus');
+    assert.strictEqual(u.params.find((p) => p[0] === 'q')[1], 'a&b=c');
+  });
+
+  await test('unfurlUrl reports a parse error for non-URLs', () => {
+    const u = toolkit.unfurlUrl('not a url');
+    assert.ok(typeof u.error === 'string' && u.error.length > 0);
+    assert.strictEqual(u.parts, null);
+  });
+
+  await test('extract-URLs lists every URL found in the text, refanging first', () => {
+    document.getElementById('urlUnfurlInput').value =
+      'see https://a.com/x?t=1 and hxxp://b[.]com/y plus plain words';
+    toolkit.renderExtractedUrls();
+    const html = document.getElementById('urlUnfurlResults').innerHTML;
+    assert.ok(html.includes('https://a.com/x?t=1'), html);
+    assert.ok(html.includes('http://b.com/y'), html);
+    assert.ok(html.includes('<span>2</span>'), 'count must report 2 URLs: ' + html);
+  });
+
+  await test('transform and preset selects are populated from the registries', () => {
+    const opSel = document.getElementById('transformOp');
+    for (const t of toolkit.TEXT_TOOLS) {
+      assert.ok(opSel.innerHTML.includes(`value="${t.id}"`), t.id + ' missing from the operation select');
+    }
+    const presetSel = document.getElementById('regexPresetSelect');
+    for (const p of toolkit.REGEX_PRESETS) {
+      assert.ok(presetSel.innerHTML.includes(`value="${p.id}"`), p.id + ' missing from the preset select');
+    }
+  });
+
+  await test('switchTab("tools") activates the tools tab panel', () => {
+    const iocTab = makeTab('ioc-tab');
+    const toolsTab = makeTab('tools-tab');
+    document.__setQuerySelectorAll('.tab-content', [iocTab, toolsTab]);
+    document.__setQuerySelectorAll('.tab-btn', []);
+    toolkit.switchTab('tools');
+    document.__setQuerySelectorAll('.tab-content', []);
+    document.__setQuerySelectorAll('.tab-btn', []);
+    assert.strictEqual(toolkit.currentTab, 'tools');
+    assert.strictEqual(toolsTab.classList.contains('active'), true, 'tools-tab must activate');
+    assert.strictEqual(toolsTab.style.display, 'block');
+    assert.strictEqual(iocTab.classList.contains('active'), false, 'ioc-tab must deactivate');
+  });
+
+  await test('Alt+3 keydown switches to the tools tab', () => {
+    const keydown = document._listeners.keydown;
+    assert.ok(keydown, 'global keydown handler not bound');
+    keydown({ altKey: true, key: '3', target: { matches: () => false }, preventDefault() {} });
+    assert.strictEqual(toolkit.currentTab, 'tools', 'Alt+3 must open the tools tab');
+  });
+
+  await test('file-hash buttons stay bound after the move to the tools tab', () => {
+    assert.ok(document.getElementById('selectFileBtn')._listeners.click, 'selectFileBtn click handler not bound');
+    assert.ok(document.getElementById('hashFileBtn')._listeners.click, 'hashFileBtn click handler not bound');
+    assert.ok(document.getElementById('fileHashInput')._listeners.change, 'fileHashInput change handler not bound');
+  });
+
+  await test('popup.html: notes markup removed, tools markup present, file hash inside tools', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'popup.html'), 'utf8');
+    for (const gone of ['notes-tab', 'notesContainer', 'notesList', 'noteModal', 'newNoteText',
+      'addNoteBtn', 'exportNotesBtn', 'clearNotesBtn', 'cancelNoteBtn', 'saveNoteBtn', 'data-tab="notes"']) {
+      assert.ok(!html.includes(gone), gone + ' must be gone from popup.html');
+    }
+    assert.ok(html.includes('data-tab="tools"'));
+    assert.ok(html.includes('aria-controls="tools-tab"'));
+    assert.ok(html.includes('fa-screwdriver-wrench'));
+    assert.ok(html.includes('id="tools-tab"'));
+    const toolsAt = html.indexOf('id="tools-tab"');
+    const hashAt = html.indexOf('id="fileHashInput"');
+    const settingsAt = html.indexOf('id="settings-tab"');
+    assert.ok(toolsAt !== -1 && hashAt !== -1 && settingsAt !== -1);
+    assert.ok(toolsAt < hashAt && hashAt < settingsAt, 'file-hash block must live inside the tools tab');
+    assert.ok(!/>Notes tab</.test(html), 'shortcuts must no longer reference a Notes tab');
+    assert.ok(/>Tools tab</.test(html), 'shortcuts must reference the Tools tab');
+  });
+
+  await test('one-time cleanup drops a stored investigationNotes key on init', async () => {
+    const seeded = await loadPopupToolkit(path.join(__dirname, '..'), {
+      seed: { investigationNotes: ['[2026-01-01T00:00:00.000Z] orphaned note'] },
+    });
+    const stored = await new Promise((resolve) => seeded.storage.get(['investigationNotes'], resolve));
+    assert.strictEqual(stored.investigationNotes, undefined, 'notes key must be removed after init');
   });
 
   console.log('\nTest Summary:');

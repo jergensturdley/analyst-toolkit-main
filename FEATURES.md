@@ -215,41 +215,25 @@ Individual buttons for:
 - On-page snippet insertion
 - Keyboard shortcuts for efficiency
 
-## 🗒️ Investigation Notes
+## 🧰 Tools
 
-### Features
-- Timestamped notes
-- Rich text support
-- Tag organization
-- Export to multiple formats
-- Context menu integration
+### File Hash Analysis
+- Select a local file and compute its SHA-1 / SHA-256 (nothing leaves the browser)
+- Copy the hashes straight into a ticket or the IOC input
 
-### Use Cases
-- Incident timelines
-- Analysis notes
-- Evidence collection
-- Report drafting
+### Transform Workbench
+- One input, one operation, one click: defang/refang, Base64 encode/decode, URL encode/decode, ROT13, SHA-1/SHA-256 of text, JWT decode (pretty-printed header + payload), Unix epoch → UTC and UTC → Unix epoch (seconds/milliseconds auto-detected)
+- "Use output as input" chains operations; bad input shows an inline error instead of failing silently
 
-## 🔧 Text Processing Tools
+### Regex Tester
+- Pattern + flags + test text; shows the match count and each match's index and capture groups
+- Presets for IPv4, domain, URL, email, MD5, SHA256 and JWT reuse the same patterns as IOC extraction
 
-### Defanging
-Convert IOCs to safe formats:
-- `.` → `[.]`
-- `http` → `hxxp`
-- `@` → `[at]`
+### URL Unfurl
+- Breaks a URL into scheme, host, port, path, fragment and each decoded query parameter
+- "Extract URLs" lists every URL found in pasted text (defanged URLs are refanged first)
 
-### Refanging
-Restore defanged IOCs to original format
-
-### Decoding
-- URL decode
-- Base64 decode
-- Hex decode
-
-### Analysis
-- Entropy calculation
-- String extraction
-- Hash generation (SHA1, SHA256)
+All tools run locally in the popup — no network calls.
 
 ## 🎯 Context Menu Integration
 

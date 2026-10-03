@@ -288,6 +288,14 @@ async function test(name, fn) {
 
   console.log('\n--- side panel ---');
 
+  await test('context menus no longer offer the removed Investigation Notes', async () => {
+    const onInstalled = bg.listeners.installed[0];
+    if (bg.menuCreated.length === 0 && typeof onInstalled === 'function') await onInstalled({ reason: 'install' });
+    assert.ok(Array.isArray(bg.menuCreated) && bg.menuCreated.length > 0, 'menus must be captured');
+    assert.ok(!bg.menuCreated.includes('add-to-notes'),
+      'the notes entry was removed with the Notes tab; found: ' + JSON.stringify(bg.menuCreated.slice(0, 8)));
+  });
+
   await test('sidePanel.setOptions pins the panel path at top-level startup', () => {
     // Runs before any dispatch: only the top-level load (not onInstalled, not a
     // message) can have produced these calls.

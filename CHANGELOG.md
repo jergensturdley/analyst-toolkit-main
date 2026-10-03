@@ -2,6 +2,17 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Tools tab (Alt+3): a transform workbench (defang/refang, Base64, URL encoding, ROT13, SHA-1/SHA-256, JWT decode, Unix⇄UTC timestamps), a regex tester with IOC presets, and a URL unfurl/extraction card — all local, no network calls
+- File Hash Analysis moved from the IOC tab into the Tools tab, freeing vertical space for results
+
+### Removed
+
+- Notes tab; stored investigation notes are dropped once on the next popup open
+
 ## [0.5.7] - 2026-10-02
 
 ### Added

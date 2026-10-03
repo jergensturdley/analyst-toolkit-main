@@ -15,6 +15,61 @@ function utf8ToBase64(text) {
   return btoa(binary);
 }
 
+// Base64 → UTF-8 text. Chrome's atob rejects bad input itself; the alphabet
+// guard keeps the lenient Buffer-based atob in the Node test harness just as
+// strict, so invalid input always raises instead of silently decoding.
+function base64Decode(text) {
+  const normalized = String(text).replace(/\s+/g, '');
+  if (normalized.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) {
+    throw new Error('Invalid Base64 input');
+  }
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  const binary = atob(padded);
+  const utf8Bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    utf8Bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(utf8Bytes);
+}
+
+// Pure helpers behind the Tools tab transform registry. Each throws on bad
+// input; the tool runner catches and shows the message.
+function rot13Text(text) {
+  return String(text).replace(/[a-zA-Z]/g, (c) => {
+    const base = c <= 'Z' ? 65 : 97;
+    return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base);
+  });
+}
+
+function jwtDecode(token) {
+  const parts = String(token).trim().split('.');
+  if (parts.length < 2 || parts.length > 3 || !parts[0] || !parts[1]) {
+    throw new Error('Invalid JWT: expected header.payload[.signature]');
+  }
+  const decodeSegment = (segment) => {
+    const b64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(base64Decode(b64));
+  };
+  return 'Header:\n' + JSON.stringify(decodeSegment(parts[0]), null, 2) +
+    '\n\nPayload:\n' + JSON.stringify(decodeSegment(parts[1]), null, 2);
+}
+
+function unixToUtc(input) {
+  const n = Number(String(input).trim());
+  if (!Number.isFinite(n)) throw new Error('Invalid Unix timestamp');
+  // Magnitude auto-detect: second timestamps stay below 1e11 until year 5138.
+  const ms = Math.abs(n) >= 1e11 ? n : n * 1000;
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) throw new Error('Unix timestamp out of range');
+  return d.toISOString();
+}
+
+function utcToUnix(input) {
+  const t = new Date(String(input).trim());
+  if (isNaN(t.getTime())) throw new Error('Invalid date string');
+  return 'Seconds:      ' + Math.floor(t.getTime() / 1000) + '\nMilliseconds: ' + t.getTime();
+}
+
 // VirusTotal URL-report identifier: the unpadded base64url of the URL. VT
 // canonicalizes server-side, so this resolves for ANY URL — unlike a
 // client-side SHA-256, which would 404 unless it exactly matches VT's
@@ -111,6 +166,22 @@ class SOCToolkit {
     this._debounceTimers = {};
     // Cache for OSINT links to avoid regenerating
     this._osintLinksCache = new Map();
+    // Tools tab: registry-driven transforms, not scattered conditionals.
+    // fn throws on bad input; runTextTool catches and shows the message.
+    this.TEXT_TOOLS = [
+      { id: 'defang', label: 'Defang', fn: async (t) => this.defangText(t) },
+      { id: 'refang', label: 'Refang', fn: async (t) => this.fangText(t) },
+      { id: 'base64_encode', label: 'Base64 encode', fn: async (t) => utf8ToBase64(String(t)) },
+      { id: 'base64_decode', label: 'Base64 decode', fn: async (t) => base64Decode(t) },
+      { id: 'url_encode', label: 'URL encode', fn: async (t) => encodeURIComponent(String(t)) },
+      { id: 'url_decode', label: 'URL decode', fn: async (t) => decodeURIComponent(String(t)) },
+      { id: 'rot13', label: 'ROT13', fn: async (t) => rot13Text(t) },
+      { id: 'sha1_text', label: 'SHA-1 (text)', fn: async (t) => this.shaText(t, 'SHA-1') },
+      { id: 'sha256_text', label: 'SHA-256 (text)', fn: async (t) => this.shaText(t, 'SHA-256') },
+      { id: 'jwt_decode', label: 'Decode JWT', fn: async (t) => jwtDecode(t) },
+      { id: 'unix_to_utc', label: 'Unix epoch → UTC', fn: async (t) => unixToUtc(t) },
+      { id: 'utc_to_unix', label: 'UTC date → Unix epoch', fn: async (t) => utcToUnix(t) }
+    ];
     this.init();
   }
 
@@ -161,6 +232,19 @@ class SOCToolkit {
       sha512: /\b[a-f0-9]{128}\b/gi
     };
 
+    // Regex tester presets reuse the extraction patterns above (plus a JWT
+    // shape) so the tool and the analyzer never drift apart.
+    this.REGEX_PRESETS = [
+      { id: 'ipv4', label: 'IPv4 address', pattern: this.patterns.ipv4.source, flags: 'g' },
+      { id: 'domain', label: 'Domain', pattern: this.patterns.domain.source, flags: 'gi' },
+      { id: 'url', label: 'URL', pattern: this.patterns.url.source, flags: 'gi' },
+      { id: 'email', label: 'Email', pattern: this.patterns.email.source, flags: 'gi' },
+      { id: 'md5', label: 'MD5 hash', pattern: this.patterns.md5.source, flags: 'g' },
+      { id: 'sha256', label: 'SHA256 hash', pattern: this.patterns.sha256.source, flags: 'g' },
+      { id: 'jwt', label: 'JWT', pattern: '[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+', flags: 'g' }
+    ];
+    this.populateToolSelects();
+
     // Load critical settings first, TLDs lazily
     await Promise.all([
       this.loadSettings(),
@@ -181,6 +265,11 @@ class SOCToolkit {
         this.handlePendingAction(result.pendingAction, result.pendingText);
         chrome.storage.local.remove(['pendingAction', 'pendingText']);
       }
+    });
+
+    // Notes feature removed; drop orphaned data once.
+    chrome.storage.local.get(['investigationNotes'], (res) => {
+      if (res.investigationNotes !== undefined) chrome.storage.local.remove(['investigationNotes']);
     });
 
     // Load TLDs lazily in the background
@@ -613,18 +702,20 @@ class SOCToolkit {
     // support format + merge options. Do not add duplicate listeners here or the
     // buttons fire twice (double download / double file picker).
 
-    // Investigation Notes functionality
-    el('addNoteBtn')?.addEventListener('click', () => this.showAddNoteModal());
-    el('exportNotesBtn')?.addEventListener('click', () => this.exportNotes());
-    el('clearNotesBtn')?.addEventListener('click', () => this.clearAllNotes());
-    el('saveNoteBtn')?.addEventListener('click', () => this.saveNote());
-    el('cancelNoteBtn')?.addEventListener('click', () => this.hideAddNoteModal());
-
     // File Hash functionality
     el('selectFileBtn')?.addEventListener('click', () => this.selectFile());
     el('hashFileBtn')?.addEventListener('click', () => this.hashSelectedFile());
     el('copyFileHashBtn')?.addEventListener('click', () => this.copyFileHashes());
     el('fileHashInput')?.addEventListener('change', (e) => this.handleFileSelection(e));
+
+    // Tools tab
+    el('transformRunBtn')?.addEventListener('click', () => this.runTextTool());
+    el('transformCopyBtn')?.addEventListener('click', () => this.copyTransformOutput());
+    el('transformReuseBtn')?.addEventListener('click', () => this.useTransformOutputAsInput());
+    el('regexRunBtn')?.addEventListener('click', () => this.runRegexTool());
+    el('regexPresetSelect')?.addEventListener('change', (e) => this.applyRegexPreset(e.target.value));
+    el('urlUnfurlBtn')?.addEventListener('click', () => this.renderUrlUnfurl());
+    el('urlExtractBtn')?.addEventListener('click', () => this.renderExtractedUrls());
 
     // Header controls
     el('floatBtn')?.addEventListener('click', () => this.toggleFloat());
@@ -637,15 +728,15 @@ class SOCToolkit {
       if (e.ctrlKey && e.key === 'Enter') this.analyzeIOCs();
       if (e.key === 'Escape') this.handleEscapeKey();
       // Show keyboard shortcuts with ?
-      if (e.key === '?' && !e.target.matches('input, textarea')) {
+      if (e.key === '?' && !e.target.matches?.('input, textarea')) {
         e.preventDefault();
         this.showKeyboardShortcuts();
       }
       // Quick navigation with numbers
-      if (e.altKey && !e.target.matches('input, textarea')) {
+      if (e.altKey && !e.target.matches?.('input, textarea')) {
         if (e.key === '1') { e.preventDefault(); this.switchTab('ioc'); }
         if (e.key === '2') { e.preventDefault(); this.switchTab('snippets'); }
-        if (e.key === '3') { e.preventDefault(); this.switchTab('notes'); }
+        if (e.key === '3') { e.preventDefault(); this.switchTab('tools'); }
         if (e.key === '4') { e.preventDefault(); this.switchTab('settings'); }
       }
     });
@@ -1059,8 +1150,8 @@ class SOCToolkit {
     let targetId;
     if (tabName === 'snippets') {
       targetId = 'snippets-tab';
-    } else if (tabName === 'notes') {
-      targetId = 'notes-tab';
+    } else if (tabName === 'tools') {
+      targetId = 'tools-tab';
     } else if (tabName === 'settings') {
       targetId = 'settings-tab';
     } else {
@@ -1082,8 +1173,6 @@ class SOCToolkit {
       } else {
         console.error('snippets-tab element not found!');
       }
-    } else if (tabName === 'notes') {
-      this.displayNotes();
     } else if (tabName === 'settings') {
       this.displayCustomOsintSources();
       this.updateStorageIndicator();
@@ -1419,26 +1508,10 @@ class SOCToolkit {
   async clearOldData(daysOld = 30) {
     const cutoff = Date.now() - (daysOld * 24 * 60 * 60 * 1000);
 
-    // 1. Prune timestamped investigation notes
-    const notes = await this.loadNotes();
-    const filteredNotes = notes.filter(note => {
-      const match = note.match(/^\[([^\]]+)\]/);
-      if (match) {
-        try {
-          const noteDate = new Date(match[1]).getTime();
-          return noteDate > cutoff;
-        } catch {
-          return true;
-        }
-      }
-      return true;
-    });
-    const removedNotes = notes.length - filteredNotes.length;
-    await this.saveNotes(filteredNotes);
-
-    // 2. Prune stale caches. The button says "clear all data older than N days",
-    // so also sweep enrichment (agent2_*, legacy agent_*), passive-DNS (pdns_cache_*) and ASN
-    // (asn_cache_*) entries — each stores a numeric .timestamp.
+    // Prune stale caches. The button says "clear all data older than N days",
+    // so sweep enrichment (agent2_*, legacy agent_*), passive-DNS (pdns_cache_*) and ASN
+    // (asn_cache_*) entries — each stores a numeric .timestamp. (The old
+    // notes pruning went away with the Notes tab; init drops that key once.)
     const all = await new Promise(resolve => chrome.storage.local.get(null, resolve));
     const staleKeys = Object.keys(all || {}).filter(k => {
       if (!/^(agent2?_|pdns_cache_|asn_cache_)/.test(k)) return false;
@@ -1450,7 +1523,7 @@ class SOCToolkit {
     }
 
     await this.updateStorageIndicator();
-    this.showNotification(`Cleared ${removedNotes} old notes, ${staleKeys.length} cache entries`, 'success');
+    this.showNotification(`Cleared ${staleKeys.length} cache entries`, 'success');
   }
 
   async loadAndShowPdnsAsnCache() {
@@ -3985,159 +4058,165 @@ class SOCToolkit {
     this.showNotification('Graph visualization cleared', 'success');
   }
 
-  // === Investigation Notes ===
-  async loadNotes() {
-    try {
-      const result = await new Promise(resolve => {
-        chrome.storage.local.get(['investigationNotes'], resolve);
-      });
-      return result.investigationNotes || [];
-    } catch (error) {
-      console.error('Failed to load notes:', error);
-      return [];
+  // === Tools Tab ===
+  populateToolSelects() {
+    const opSel = document.getElementById('transformOp');
+    if (opSel) {
+      opSel.innerHTML = this.TEXT_TOOLS
+        .map(t => `<option value="${this.escapeHtml(t.id)}">${this.escapeHtml(t.label)}</option>`)
+        .join('');
+    }
+    const presetSel = document.getElementById('regexPresetSelect');
+    if (presetSel) {
+      presetSel.innerHTML = '<option value="">Custom…</option>' + this.REGEX_PRESETS
+        .map(p => `<option value="${this.escapeHtml(p.id)}">${this.escapeHtml(p.label)}</option>`)
+        .join('');
     }
   }
 
-  async saveNotes(notes) {
+  async shaText(text, algorithm) {
+    const hashBuffer = await crypto.subtle.digest(algorithm, new TextEncoder().encode(String(text)));
+    return this.bufferToHex(hashBuffer);
+  }
+
+  async runTextTool() {
+    const inputEl = document.getElementById('transformInput');
+    const opSel = document.getElementById('transformOp');
+    const outputEl = document.getElementById('transformOutput');
+    const errorEl = document.getElementById('transformError');
+    if (!inputEl || !opSel || !outputEl || !errorEl) return;
+    const tool = this.TEXT_TOOLS.find(t => t.id === opSel.value);
+    if (!tool) return;
     try {
-      await new Promise(resolve => {
-        chrome.storage.local.set({ investigationNotes: notes }, resolve);
-      });
-    } catch (error) {
-      console.error('Failed to save notes:', error);
+      outputEl.textContent = await tool.fn(inputEl.value);
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+    } catch (e) {
+      // Tool failures are analyst-input problems — show them, never throw.
+      outputEl.textContent = '';
+      errorEl.textContent = e && e.message ? e.message : String(e);
+      errorEl.style.display = 'block';
     }
   }
 
-  async displayNotes() {
-    const notes = await this.loadNotes();
-    const notesList = document.getElementById('notesList');
+  copyTransformOutput() {
+    const outputEl = document.getElementById('transformOutput');
+    if (outputEl && outputEl.textContent) this.copyToClipboard(outputEl.textContent);
+  }
 
-    if (!notesList) return;
+  useTransformOutputAsInput() {
+    const inputEl = document.getElementById('transformInput');
+    const outputEl = document.getElementById('transformOutput');
+    if (inputEl && outputEl) inputEl.value = outputEl.textContent;
+  }
 
-    if (notes.length === 0) {
-      notesList.innerHTML = '<div style="color: var(--muted-text); text-align: center; padding: 20px;">No investigation notes yet</div>';
-      return;
-    }
-
-    notesList.innerHTML = notes.map((note, index) => {
-      // Parse timestamp and content safely
-      const timestampMatch = note.match(/^\[([^\]]+)\]\s*(.*)$/s);
-      let dateStr = '';
-      let noteContent = note;
-      if (timestampMatch) {
-        try {
-          dateStr = new Date(timestampMatch[1]).toLocaleString();
-          noteContent = timestampMatch[2] || '';
-        } catch {
-          dateStr = 'Invalid date';
+  // Pure regex core: never throws — invalid patterns come back as { error }.
+  runRegex(pattern, flags, text) {
+    const matches = [];
+    try {
+      const re = new RegExp(pattern, flags || 'g');
+      if (re.global) {
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          matches.push({ text: m[0], index: m.index, groups: m.slice(1) });
+          if (m[0] === '') re.lastIndex++;
         }
+      } else {
+        const m = re.exec(text);
+        if (m) matches.push({ text: m[0], index: m.index, groups: m.slice(1) });
       }
-      // Escape HTML to prevent XSS
-      const escapedContent = this.escapeHtml(noteContent);
-      return `
-      <div class="note-item" style="border-bottom: 1px solid #374151; padding: 8px; margin-bottom: 8px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-          <div style="flex: 1;">
-            <div style="color: var(--muted-text); font-size: 11px; margin-bottom: 4px;">
-              ${this.escapeHtml(dateStr)}
-            </div>
-            <div style="color: var(--text-color); font-size: 13px; white-space: pre-wrap;">
-              ${escapedContent}
-            </div>
-          </div>
-          <button class="note-delete-btn" data-note-index="${index}" style="background: var(--danger-color); color: white; border: none; border-radius: 3px; padding: 2px 6px; font-size: 10px; cursor: pointer;">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Event delegation — MV3 extension-page CSP blocks inline onclick handlers.
-    if (this._notesListClickHandler) {
-      notesList.removeEventListener('click', this._notesListClickHandler);
-    }
-    this._notesListClickHandler = (e) => {
-      const btn = e.target.closest('.note-delete-btn');
-      if (!btn) return;
-      const index = parseInt(btn.dataset.noteIndex, 10);
-      if (Number.isFinite(index)) this.deleteNote(index);
-    };
-    notesList.addEventListener('click', this._notesListClickHandler);
-  }
-
-  showAddNoteModal() {
-    const modal = document.getElementById('noteModal');
-    const textarea = document.getElementById('newNoteText');
-    if (modal && textarea) {
-      modal.style.display = 'block';
-      textarea.value = '';
-      textarea.focus();
+      return { matches, error: null };
+    } catch (e) {
+      return { matches: [], error: e && e.message ? e.message : String(e) };
     }
   }
 
-  hideAddNoteModal() {
-    const modal = document.getElementById('noteModal');
-    if (modal) {
-      modal.style.display = 'none';
-    }
+  applyRegexPreset(presetId) {
+    const preset = this.REGEX_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+    const patternEl = document.getElementById('regexPatternInput');
+    const flagsEl = document.getElementById('regexFlagsInput');
+    if (patternEl) patternEl.value = preset.pattern;
+    if (flagsEl) flagsEl.value = preset.flags || 'g';
   }
 
-  async saveNote() {
-    const textarea = document.getElementById('newNoteText');
-    if (!textarea || !textarea.value.trim()) return;
-
-    const notes = await this.loadNotes();
-    const timestamp = new Date().toISOString();
-    const newNote = `[${timestamp}] ${textarea.value.trim()}`;
-
-    notes.push(newNote);
-    await this.saveNotes(notes);
-    await this.displayNotes();
-    this.hideAddNoteModal();
-    this.showStatus('Note added successfully', 'success');
-  }
-
-  async deleteNote(index) {
-    const notes = await this.loadNotes();
-    notes.splice(index, 1);
-    await this.saveNotes(notes);
-    await this.displayNotes();
-    this.showStatus('Note deleted', 'success');
-  }
-
-  async exportNotes() {
-    const notes = await this.loadNotes();
-    if (notes.length === 0) {
-      this.showStatus('No notes to export', 'warning');
+  runRegexTool() {
+    const pattern = document.getElementById('regexPatternInput')?.value ?? '';
+    const flags = document.getElementById('regexFlagsInput')?.value || 'g';
+    const text = document.getElementById('regexTextInput')?.value ?? '';
+    const out = document.getElementById('regexResults');
+    if (!out) return;
+    const row = (label, value) => `<div class="settings-shortcut-row"><span>${this.escapeHtml(label)}</span><span>${this.escapeHtml(value)}</span></div>`;
+    const { matches, error } = this.runRegex(pattern, flags, text);
+    if (error) {
+      out.innerHTML = `<div class="settings-shortcut-row" style="color:var(--danger-color);"><span>Error</span><span>${this.escapeHtml(error)}</span></div>`;
       return;
     }
-
-    const exportData = {
-      exportDate: new Date().toISOString(),
-      notesCount: notes.length,
-      notes: notes
-    };
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: 'application/json'
-    });
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `investigation-notes-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    this.showStatus('Notes exported successfully', 'success');
+    if (!matches.length) {
+      out.innerHTML = row('Matches', '0');
+      return;
+    }
+    const rows = matches.map((m, i) => {
+      const groups = m.groups.length
+        ? ` — groups: ${m.groups.map(g => this.escapeHtml(g == null ? '' : g)).join(', ')}`
+        : '';
+      return row(`#${i + 1} @ index ${m.index}`, m.text + groups);
+    }).join('');
+    out.innerHTML = row('Matches', String(matches.length)) + rows;
   }
 
-  async clearAllNotes() {
-    if (confirm('Are you sure you want to delete all investigation notes? This cannot be undone.')) {
-      await this.saveNotes([]);
-      await this.displayNotes();
-      this.showStatus('All notes cleared', 'success');
+  // Pure URL core using the URL API; never throws.
+  unfurlUrl(url) {
+    try {
+      const u = new URL(String(url).trim());
+      const params = [];
+      u.searchParams.forEach((value, name) => params.push([name, value]));
+      return {
+        parts: {
+          scheme: u.protocol.replace(':', ''),
+          host: u.hostname,
+          port: u.port || (u.protocol === 'https:' ? '443' : u.protocol === 'http:' ? '80' : ''),
+          path: u.pathname,
+          fragment: u.hash.replace(/^#/, '')
+        },
+        params,
+        error: null
+      };
+    } catch (e) {
+      return { parts: null, params: [], error: 'Invalid URL: ' + (e && e.message ? e.message : e) };
     }
+  }
+
+  renderUrlUnfurl() {
+    const inputEl = document.getElementById('urlUnfurlInput');
+    const out = document.getElementById('urlUnfurlResults');
+    if (!inputEl || !out) return;
+    const firstLine = inputEl.value.split('\n').map(l => l.trim()).find(Boolean) || '';
+    const { parts, params, error } = this.unfurlUrl(this.fangText(firstLine));
+    if (error) {
+      out.innerHTML = `<div class="settings-shortcut-row" style="color:var(--danger-color);"><span>Error</span><span>${this.escapeHtml(error)}</span></div>`;
+      return;
+    }
+    const row = (label, value) => `<div class="settings-shortcut-row"><span>${this.escapeHtml(label)}</span><span>${this.escapeHtml(value)}</span></div>`;
+    const rows = [
+      row('scheme', parts.scheme),
+      row('host', parts.host),
+      row('port', parts.port),
+      row('path', parts.path),
+      row('fragment', parts.fragment)
+    ].concat(params.map(([name, value]) => row(name, value)));
+    out.innerHTML = rows.join('');
+  }
+
+  renderExtractedUrls() {
+    const inputEl = document.getElementById('urlUnfurlInput');
+    const out = document.getElementById('urlUnfurlResults');
+    if (!inputEl || !out) return;
+    // Refang first so defanged indicators still extract, matching the IOC input.
+    const urls = this.fangText(inputEl.value).match(this.patterns.url) || [];
+    const row = (label, value) => `<div class="settings-shortcut-row"><span>${this.escapeHtml(label)}</span><span>${this.escapeHtml(value)}</span></div>`;
+    out.innerHTML = row('URLs found', String(urls.length)) +
+      urls.map(u => row('', u)).join('');
   }
 
   // === File Hash Analysis ===

@@ -1867,105 +1867,6 @@
     .rate-limit-bar-fill { height: 100%; border-radius: 2px; background: var(--accent-primary); transition: width 0.3s; }
     .rate-limit-bar-fill.danger { background: var(--danger-color); }
 
-    /* Notes Tab Styles */
-    .notes-header {
-      margin-bottom: 16px;
-    }
-
-    .notes-header h3 {
-      color: var(--text-primary);
-      font-size: 14px;
-      margin-bottom: 8px;
-    }
-
-    .notes-controls {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .notes-controls .btn {
-      padding: 6px 12px;
-      font-size: 12px;
-    }
-
-    .notes-container {
-      max-height: 300px;
-      overflow-y: auto;
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      background: var(--bg-secondary);
-    }
-
-    .notes-list {
-      padding: 8px;
-    }
-
-    .note-modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      z-index: 1000;
-    }
-
-    .note-modal-content {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 8px;
-      padding: 20px;
-      width: 90%;
-      max-width: 400px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }
-
-    .note-modal-content h4 {
-      color: var(--text-primary);
-      margin-bottom: 12px;
-    }
-
-    .note-textarea {
-      width: 100%;
-      height: 80px;
-      padding: 8px;
-      border-radius: 6px;
-      border: 1px solid var(--border-primary);
-      background: var(--bg-accent);
-      color: var(--text-primary);
-      font-family: inherit;
-      font-size: 12px;
-      resize: vertical;
-      margin-bottom: 12px;
-    }
-
-    .note-textarea:focus {
-      outline: none;
-      border-color: var(--button-active);
-    }
-
-    .note-textarea::placeholder {
-      color: var(--text-secondary);
-      opacity: 0.7;
-    }
-
-    .note-modal-actions {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .note-modal-actions .btn {
-      padding: 6px 12px;
-      font-size: 12px;
-    }
-
     /* Snippet Editor Styles */
     .snippet-editor {
       display: none;
@@ -2231,7 +2132,7 @@
           <h4 style="color:var(--text-primary); margin:0 0 8px 0; font-size:13px;">Navigation</h4>
           <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>IOC Analysis tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+1</kbd></div>
           <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Snippets tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+2</kbd></div>
-          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Notes tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+3</kbd></div>
+          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Tools tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+3</kbd></div>
           <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Settings tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+4</kbd></div>
         </div>
         <div style="margin-bottom:16px;">
@@ -2277,9 +2178,9 @@
       <i class="fa-solid fa-code" aria-hidden="true"></i>
       Snippets
     </button>
-    <button class="tab-btn" data-tab="notes" role="tab" aria-selected="false" aria-controls="notes-tab">
-      <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
-      Notes
+    <button class="tab-btn" data-tab="tools" role="tab" aria-selected="false" aria-controls="tools-tab">
+      <i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>
+      Tools
     </button>
     <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="settings-tab">
       <i class="fa-solid fa-cog" aria-hidden="true"></i>
@@ -2462,32 +2363,9 @@
   </div>
 </div>
 
-<!-- File Hash Analysis Section -->
-<div class="file-hash-section">
-  <h4>
-    <i class="fa-solid fa-file-shield"></i> File Hash Analysis
-  </h4>
-  <div class="file-hash-controls">
-    <input type="file" id="fileHashInput" style="display: none;">
-    <button id="selectFileBtn" class="btn">
-      <i class="fa-solid fa-file-arrow-up"></i> Select File
-    </button>
-    <span id="selectedFileName" class="file-hash-filename"></span>
-    <button id="hashFileBtn" class="btn" style="display: none;">
-      <i class="fa-solid fa-calculator"></i> Calculate Hashes
-    </button>
+<!-- File Hash Analysis Section moved to the Tools tab -->
   </div>
-  <div id="fileHashResults" class="file-hash-results">
-    <div class="hash-label">File Hashes:</div>
-    <div id="fileHashOutput" class="file-hash-output"></div>
-    <button id="copyFileHashBtn" class="btn">
-      <i class="fa-solid fa-copy"></i> Copy Hashes
-    </button>
-  </div>
-</div>
 
-  </div>
-  
   <!-- Snippets Tab -->
   <div class="tab-content" id="snippets-tab" role="tabpanel" aria-label="Snippets">
     <input 
@@ -2549,40 +2427,98 @@
     </div>
   </div>
   
-  <!-- Investigation Notes Tab -->
-  <div class="tab-content" id="notes-tab" role="tabpanel" aria-label="Investigation Notes">
-    <div class="notes-header">
-      <h3>
-        <i class="fa-solid fa-file-lines"></i> Investigation Notes
-      </h3>
-      <div class="notes-controls">
-        <button id="addNoteBtn" class="btn">
-          <i class="fa-solid fa-plus"></i> Add Note
+  <!-- Tools Tab -->
+  <div class="tab-content" id="tools-tab" role="tabpanel" aria-label="Tools">
+
+    <!-- File Hash Analysis (moved from the IOC tab to free vertical space) -->
+    <div class="file-hash-section">
+      <h4>
+        <i class="fa-solid fa-file-shield"></i> File Hash Analysis
+      </h4>
+      <div class="file-hash-controls">
+        <input type="file" id="fileHashInput" style="display: none;">
+        <button id="selectFileBtn" class="btn">
+          <i class="fa-solid fa-file-arrow-up"></i> Select File
         </button>
-        <button id="exportNotesBtn" class="btn">
-          <i class="fa-solid fa-download"></i> Export
+        <span id="selectedFileName" class="file-hash-filename"></span>
+        <button id="hashFileBtn" class="btn" style="display: none;">
+          <i class="fa-solid fa-calculator"></i> Calculate Hashes
         </button>
-        <button id="clearNotesBtn" class="btn">
-          <i class="fa-solid fa-trash"></i> Clear All
+      </div>
+      <div id="fileHashResults" class="file-hash-results">
+        <div class="hash-label">File Hashes:</div>
+        <div id="fileHashOutput" class="file-hash-output"></div>
+        <button id="copyFileHashBtn" class="btn">
+          <i class="fa-solid fa-copy"></i> Copy Hashes
         </button>
       </div>
     </div>
-    
-    <div id="notesContainer" class="notes-container">
-      <div id="notesList" class="notes-list">
-        <!-- Notes will be populated here -->
+
+    <!-- Transform workbench -->
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-right-left" aria-hidden="true"></i> Transform
       </div>
-    </div>
-    
-    <!-- Add Note Modal -->
-    <div id="noteModal" class="note-modal">
-      <div class="note-modal-content">
-        <h4>Add Investigation Note</h4>
-        <textarea id="newNoteText" class="note-textarea" placeholder="Enter your note..."></textarea>
-        <div class="note-modal-actions">
-          <button id="cancelNoteBtn" class="btn">Cancel</button>
-          <button id="saveNoteBtn" class="btn">Save Note</button>
+      <div class="settings-section-body">
+        <textarea id="transformInput" class="snippet-content-input" style="min-height:70px;" placeholder="Input text…" aria-label="Transform input"></textarea>
+        <div class="settings-row-inline">
+          <label class="settings-label" for="transformOp">Operation</label>
+          <select id="transformOp" class="settings-select"></select>
+          <button id="transformRunBtn" class="btn btn-primary btn-small">
+            <i class="fa-solid fa-play" aria-hidden="true"></i> Run
+          </button>
         </div>
+        <div id="transformError" class="settings-hint" role="alert" style="display:none; color:var(--danger-color);"></div>
+        <pre id="transformOutput" class="file-hash-output" style="max-height:160px;"></pre>
+        <div class="settings-row-inline">
+          <button id="transformCopyBtn" class="btn btn-secondary btn-small">
+            <i class="fa-regular fa-copy" aria-hidden="true"></i> Copy output
+          </button>
+          <button id="transformReuseBtn" class="btn btn-secondary btn-small">
+            <i class="fa-solid fa-rotate" aria-hidden="true"></i> Use output as input
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Regex tester -->
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-asterisk" aria-hidden="true"></i> Regex Tester
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-row-inline">
+          <label class="settings-label" for="regexPresetSelect">Preset</label>
+          <select id="regexPresetSelect" class="settings-select"></select>
+        </div>
+        <div class="settings-row-inline">
+          <input id="regexPatternInput" class="settings-input settings-input-mono" placeholder="Pattern — e.g. (\d+\.){3}\d+" aria-label="Regex pattern">
+          <input id="regexFlagsInput" class="settings-input settings-input-mono" style="max-width:70px;" value="g" aria-label="Regex flags">
+          <button id="regexRunBtn" class="btn btn-primary btn-small">
+            <i class="fa-solid fa-play" aria-hidden="true"></i> Test
+          </button>
+        </div>
+        <textarea id="regexTextInput" class="snippet-content-input" style="min-height:70px;" placeholder="Test text…" aria-label="Regex test text"></textarea>
+        <div id="regexResults" class="settings-shortcuts-list"></div>
+      </div>
+    </div>
+
+    <!-- URL unfurl / extraction -->
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-link" aria-hidden="true"></i> URL Unfurl
+      </div>
+      <div class="settings-section-body">
+        <textarea id="urlUnfurlInput" class="snippet-content-input" style="min-height:60px;" placeholder="https://example.com/path?q=encoded%20value#frag" aria-label="URL to unfurl"></textarea>
+        <div class="settings-row-inline">
+          <button id="urlUnfurlBtn" class="btn btn-primary btn-small">
+            <i class="fa-solid fa-sitemap" aria-hidden="true"></i> Unfurl
+          </button>
+          <button id="urlExtractBtn" class="btn btn-secondary btn-small">
+            <i class="fa-solid fa-list" aria-hidden="true"></i> Extract URLs
+          </button>
+        </div>
+        <div id="urlUnfurlResults" class="settings-shortcuts-list"></div>
       </div>
     </div>
   </div>
@@ -2806,7 +2742,7 @@
           </div>
         </div>
         <div class="settings-row-inline">
-          <span class="settings-hint">Clear notes older than</span>
+          <span class="settings-hint">Clear cached data older than</span>
           <select id="clearOldDataDays" class="settings-select">
             <option value="7">7 days</option>
             <option value="14">14 days</option>
@@ -2844,7 +2780,7 @@
           <div class="settings-shortcut-row"><span>Show snippets on page</span><span><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd></span></div>
           <div class="settings-shortcut-row"><span>IOC Analysis tab</span><span><kbd>Alt</kbd>+<kbd>1</kbd></span></div>
           <div class="settings-shortcut-row"><span>Snippets tab</span><span><kbd>Alt</kbd>+<kbd>2</kbd></span></div>
-          <div class="settings-shortcut-row"><span>Notes tab</span><span><kbd>Alt</kbd>+<kbd>3</kbd></span></div>
+          <div class="settings-shortcut-row"><span>Tools tab</span><span><kbd>Alt</kbd>+<kbd>3</kbd></span></div>
           <div class="settings-shortcut-row"><span>Settings tab</span><span><kbd>Alt</kbd>+<kbd>4</kbd></span></div>
         </div>
       </div>
