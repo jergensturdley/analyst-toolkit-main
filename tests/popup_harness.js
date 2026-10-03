@@ -94,6 +94,7 @@ async function loadPopupToolkit(root, opts = {}) {
   const src = fs.readFileSync(path.join(root, 'popup.js'), 'utf8');
   const document = makeDocument();
   const storageArea = makeStorageArea();
+  if (opts.seed) storageArea.set(opts.seed);
   const tabCreates = [];
   const windowUpdates = [];
   const closeCalls = [];
@@ -105,9 +106,13 @@ async function loadPopupToolkit(root, opts = {}) {
   const sandbox = {
     console,
     TextEncoder,
+    TextDecoder,
     URLSearchParams,
     btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+    // window.crypto.subtle (SHA-1/SHA-256 text tools); same pattern as
+    // background_harness.js.
+    crypto: require('crypto').webcrypto,
     setTimeout,
     clearTimeout,
     setInterval,
@@ -147,7 +152,13 @@ async function loadPopupToolkit(root, opts = {}) {
   sandbox.MutationObserver = class { observe() {} disconnect() {} };
   // Minimal DOM APIs popup.js touches on export/import paths.
   sandbox.Blob = class { constructor(parts, opts) { this.parts = parts; this.type = opts && opts.type; } };
-  sandbox.URL = { createObjectURL: () => 'blob:harness', revokeObjectURL() {} };
+  // Real WHATWG URL so `new URL(...)` parsing (validateAskAiTargetUrl, the
+  // unfurl tool) behaves like the browser; the blob-object statics serve the
+  // export/download paths.
+  sandbox.URL = class extends URL {
+    static createObjectURL() { return 'blob:harness'; }
+    static revokeObjectURL() {}
+  };
   sandbox.FileReader = class {
     readAsText(file) { if (this.onload) this.onload({ target: { result: file && file.__text } }); }
   };
