@@ -1536,19 +1536,31 @@
     .ioc-graph-header button.collapsed #graphCollapseChevron,
     .ioc-list-header button.collapsed #expandAllLinksChevron { transform: rotate(-90deg); }
 
-    /* File Hash Analysis Styles */
-    .file-hash-section {
-      margin: 8px 0 0 0;
-      padding: 12px;
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      background: var(--bg-secondary);
+    /* Tool cards (Tools tab): resizable bodies with a bottom drag grip */
+    .tool-card-body {
+      position: relative;
     }
 
-    .file-hash-section h4 {
-      color: var(--text-primary);
-      font-size: 13px;
-      margin: 0 0 8px 0;
+    /* Growing the card grows the working area */
+    .tool-card-body textarea {
+      flex: 1;
+    }
+
+    .tool-card-grip {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 7px;
+      cursor: ns-resize;
+      background: var(--border-secondary);
+      opacity: 0.4;
+      transition: opacity 0.15s;
+    }
+
+    .tool-card-grip:hover {
+      opacity: 1;
+      background: var(--button-active);
     }
 
     .file-hash-controls {
@@ -2431,35 +2443,40 @@
   <div class="tab-content" id="tools-tab" role="tabpanel" aria-label="Tools">
 
     <!-- File Hash Analysis (moved from the IOC tab to free vertical space) -->
-    <div class="file-hash-section">
-      <h4>
-        <i class="fa-solid fa-file-shield"></i> File Hash Analysis
-      </h4>
-      <div class="file-hash-controls">
-        <input type="file" id="fileHashInput" style="display: none;">
-        <button id="selectFileBtn" class="btn">
-          <i class="fa-solid fa-file-arrow-up"></i> Select File
-        </button>
-        <span id="selectedFileName" class="file-hash-filename"></span>
-        <button id="hashFileBtn" class="btn" style="display: none;">
-          <i class="fa-solid fa-calculator"></i> Calculate Hashes
-        </button>
+    <details class="settings-section" id="toolCard_filehash" open>
+      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
+        <i class="fa-solid fa-file-shield" aria-hidden="true"></i> File Hash Analysis
+        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+      </summary>
+      <div class="settings-section-body tool-card-body" id="toolCardBody_filehash">
+        <div class="file-hash-controls">
+          <input type="file" id="fileHashInput" style="display: none;">
+          <button id="selectFileBtn" class="btn">
+            <i class="fa-solid fa-file-arrow-up"></i> Select File
+          </button>
+          <span id="selectedFileName" class="file-hash-filename"></span>
+          <button id="hashFileBtn" class="btn" style="display: none;">
+            <i class="fa-solid fa-calculator"></i> Calculate Hashes
+          </button>
+        </div>
+        <div id="fileHashResults" class="file-hash-results">
+          <div class="hash-label">File Hashes:</div>
+          <div id="fileHashOutput" class="file-hash-output"></div>
+          <button id="copyFileHashBtn" class="btn">
+            <i class="fa-solid fa-copy"></i> Copy Hashes
+          </button>
+        </div>
+        <div class="tool-card-grip" id="toolGrip_filehash" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
-      <div id="fileHashResults" class="file-hash-results">
-        <div class="hash-label">File Hashes:</div>
-        <div id="fileHashOutput" class="file-hash-output"></div>
-        <button id="copyFileHashBtn" class="btn">
-          <i class="fa-solid fa-copy"></i> Copy Hashes
-        </button>
-      </div>
-    </div>
+    </details>
 
     <!-- Transform workbench -->
-    <div class="settings-section">
-      <div class="settings-section-header">
+    <details class="settings-section" id="toolCard_transform" open>
+      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
         <i class="fa-solid fa-right-left" aria-hidden="true"></i> Transform
-      </div>
-      <div class="settings-section-body">
+        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+      </summary>
+      <div class="settings-section-body tool-card-body" id="toolCardBody_transform">
         <textarea id="transformInput" class="snippet-content-input" style="min-height:70px;" placeholder="Input text…" aria-label="Transform input"></textarea>
         <div class="settings-row-inline">
           <label class="settings-label" for="transformOp">Operation</label>
@@ -2478,15 +2495,17 @@
             <i class="fa-solid fa-rotate" aria-hidden="true"></i> Use output as input
           </button>
         </div>
+        <div class="tool-card-grip" id="toolGrip_transform" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
-    </div>
+    </details>
 
-    <!-- Regex tester -->
-    <div class="settings-section">
-      <div class="settings-section-header">
+    <!-- Regex tester (matches live as you type) -->
+    <details class="settings-section" id="toolCard_regex" open>
+      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
         <i class="fa-solid fa-asterisk" aria-hidden="true"></i> Regex Tester
-      </div>
-      <div class="settings-section-body">
+        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+      </summary>
+      <div class="settings-section-body tool-card-body" id="toolCardBody_regex">
         <div class="settings-row-inline">
           <label class="settings-label" for="regexPresetSelect">Preset</label>
           <select id="regexPresetSelect" class="settings-select"></select>
@@ -2494,21 +2513,20 @@
         <div class="settings-row-inline">
           <input id="regexPatternInput" class="settings-input settings-input-mono" placeholder="Pattern — e.g. (\d+\.){3}\d+" aria-label="Regex pattern">
           <input id="regexFlagsInput" class="settings-input settings-input-mono" style="max-width:70px;" value="g" aria-label="Regex flags">
-          <button id="regexRunBtn" class="btn btn-primary btn-small">
-            <i class="fa-solid fa-play" aria-hidden="true"></i> Test
-          </button>
         </div>
         <textarea id="regexTextInput" class="snippet-content-input" style="min-height:70px;" placeholder="Test text…" aria-label="Regex test text"></textarea>
-        <div id="regexResults" class="settings-shortcuts-list"></div>
+        <div id="regexResults" class="settings-shortcuts-list" aria-live="polite"></div>
+        <div class="tool-card-grip" id="toolGrip_regex" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
-    </div>
+    </details>
 
     <!-- URL unfurl / extraction -->
-    <div class="settings-section">
-      <div class="settings-section-header">
+    <details class="settings-section" id="toolCard_unfurl" open>
+      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
         <i class="fa-solid fa-link" aria-hidden="true"></i> URL Unfurl
-      </div>
-      <div class="settings-section-body">
+        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+      </summary>
+      <div class="settings-section-body tool-card-body" id="toolCardBody_unfurl">
         <textarea id="urlUnfurlInput" class="snippet-content-input" style="min-height:60px;" placeholder="https://example.com/path?q=encoded%20value#frag" aria-label="URL to unfurl"></textarea>
         <div class="settings-row-inline">
           <button id="urlUnfurlBtn" class="btn btn-primary btn-small">
@@ -2519,8 +2537,9 @@
           </button>
         </div>
         <div id="urlUnfurlResults" class="settings-shortcuts-list"></div>
+        <div class="tool-card-grip" id="toolGrip_unfurl" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
-    </div>
+    </details>
   </div>
   
   <!-- Settings Tab -->

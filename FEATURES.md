@@ -217,6 +217,8 @@ Individual buttons for:
 
 ## 🧰 Tools
 
+Every card collapses to its header and drag-resizes via its bottom grip; both states are remembered between sessions.
+
 ### File Hash Analysis
 - Select a local file and compute its SHA-1 / SHA-256 (nothing leaves the browser)
 - Copy the hashes straight into a ticket or the IOC input
@@ -226,7 +228,7 @@ Individual buttons for:
 - "Use output as input" chains operations; bad input shows an inline error instead of failing silently
 
 ### Regex Tester
-- Pattern + flags + test text; shows the match count and each match's index and capture groups
+- Matching runs live as you type (150ms debounce); shows the match count and each match's index and capture groups
 - Presets for IPv4, domain, URL, email, MD5, SHA256 and JWT reuse the same patterns as IOC extraction
 
 ### URL Unfurl
