@@ -2,11 +2,18 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
-## [Unreleased]
+## [0.5.7] - 2026-10-02
 
 ### Added
 
 - Chrome side panel: open the toolkit in the browser's sidebar from the header button or Settings → Window & Layout; a segmented pill nav and a narrow, non-overflowing layout fill the panel, and an option makes the toolbar button open the sidebar instead of the popup (Chrome only — Firefox has no side panel API, and its build strips the manifest key)
+- Small floating windows share the panel's responsive narrow layout below ~430px
+- CI now fails when any version surface (package.json, popup fallback label, CHANGELOG section, store listing header) drifts from the manifest
+- Store screenshots for the sidebar, floating window and side panel, regenerable via `scripts/capture-feature-shots.js`
+
+### Fixed
+
+- `screenshots/take.js` hardcoded a Playwright browser-cache path that no longer exists and crashed with a raw stack trace without the npm package; it now resolves any cached build and prints the install command when the prerequisite is missing
 
 ## [0.5.6] - 2026-10-02
 
