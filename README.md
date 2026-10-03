@@ -38,15 +38,11 @@ This extension provides a suite of tools to accelerate the investigation of secu
 
 ### Productivity Features
 - **Snippet Library**: Personal, searchable library for frequently used notes, commands, and templates
-- **Investigation Notes**: Track your analysis with timestamped notes
-- **Text Processing Tools**: 
-  - Base64 encoding/decoding
-  - Hex encoding/decoding
-  - ROT13 decoding
-  - URL decoding
-  - Entropy analysis
-  - String extraction
-  - Hash generation (SHA1, SHA256)
+- **Tools Tab**: All-local utilities for triage
+  - Transform workbench: defang/refang, Base64 and URL encode/decode, ROT13, SHA-1/SHA-256 text hashing, JWT decode, Unix timestamp conversion
+  - Live regex tester with IOC pattern presets
+  - URL unfurling with decoded query parameters, plus bulk URL extraction
+  - File hash analysis (SHA-1/SHA-256)
 - **CyberChef Integration**: Open selected text in CyberChef for advanced processing and analysis
   - Support for custom/self-hosted CyberChef instances
   - Configurable URL in settings

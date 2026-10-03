@@ -16,60 +16,15 @@ Extract, defang, and pivot on IOCs in seconds. Built for SOC analysts.
 
 ## Detailed Description
 
-SOC Analyst Toolkit is a free, privacy-first browser extension for security operations center (SOC) analysts and cybersecurity professionals. It streamlines the investigation of security alerts by extracting, transforming, and enriching indicators of compromise (IOCs) directly in your browser — nothing leaves your machine until you look something up.
+A comprehensive toolkit for SOC analysts with IOC analysis, OSINT integration, and snippet management
 
-### Key Features
+SOC Analyst Toolkit helps you investigate security alerts from selected text, in a popup, floating window, or side panel.
 
-**IOC Extraction**
-- Automatically detects 9 IOC types from any selected text: IPv4, IPv6, domains, URLs, email addresses, file hashes (MD5, SHA1, SHA256, SHA512), CVE identifiers, MITRE ATT&CK technique IDs, and cryptocurrency addresses.
-- Real-time statistics dashboard with per-type counts.
-- Deduplication and sorting with one click.
+It finds indicators such as IP addresses, links, file hashes, and vulnerability IDs, and organizes them for review. Remove duplicates, prepare indicators for safe sharing, and explore connections in a graph.
 
-**Auto-Enrichment**
-- One click per indicator enriches it against VirusTotal, AbuseIPDB, ipinfo.io, and IPAddress.to — with keyless coverage from crt.sh, MalwareBazaar, and urlscan.
-- Optional auto-enrich toggle (off by default): after an analysis, the first 5 indicators per type enrich automatically; "Enrich remaining" covers the rest.
-- Each result row shows a verdict chip and risk score. Click it for per-provider facts, each with its own copy button.
-- First use asks consent once; enrichment honors your per-provider toggles and API keys, and caches results so re-checks cost no quota.
+For more context, look up any result and see what the sources found. Local tools cover transformations, regex testing, URL unfurling, and file hashing; a prompt builder supports AI-assisted triage.
 
-**OSINT Integration**
-- One-click lookup links to 20+ threat intelligence platforms: VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, IPAddress.to, Shodan, URLhaus, urlscan.io, NVD, MITRE ATT&CK, and more.
-- Links sit behind a per-row toggle; "Expand all links" opens them in one click.
-- Copy any link plain or as Markdown.
-- Custom OSINT entries in Settings — add your internal threat intel sources.
-
-**IOC Relation Graph**
-- See how extracted indicators relate in an interactive graph.
-- Right-click a node to enrich it, pull passive DNS, resolve ASNs, or open it in VirusTotal or CyberChef.
-- Collapsible out of the way when you only need the list; the choice is remembered.
-
-**Workspace**
-- Pop the toolkit into a floating window that stays open while you work; drag the corner grip to resize it, press Esc to close it.
-- OSINT links open in background tabs so your analysis stays on screen; middle-click or Ctrl/Cmd-click keeps normal browser behavior.
-- Choose tabs across the top or a sidebar rail on the left in Settings → Window & Layout.
-
-**Defanging & Refanging**
-- Defang IOCs for safe sharing (hxxp://, [.] , [@] , etc.).
-- Refang with a single click for use in tools.
-- Copy individual or all IOCs as defanged text.
-
-**AI-Assisted Triage**
-- Build structured triage prompts for any AI chat tool.
-- Choose from presets (Claude, ChatGPT, Gemini) or use a custom URL.
-- Copy prompt to clipboard and paste into your AI of choice.
-- No data sent to AI providers — you control where the prompt goes.
-
-**Text Utilities**
-- Hash text with SHA-1 or SHA-256.
-- Base64 encode/decode, URL encode/decode.
-- CyberChef integration for 100+ operations.
-- Sort and deduplicate lines.
-
-**Privacy-First**
-- All data stored locally in your browser (`chrome.storage.local`).
-- No telemetry, analytics, or third-party SDKs.
-- Lookups happen only when you click. Enrichment requires one-time consent; the automatic pass is opt-in and off by default.
-- Consent modal and reset option included.
-
+Your data is stored locally. External lookups require your consent, and automatic lookups are off by default. The extension does not send prompts to AI services or collect analytics.
 ---
 
 ## Single-Purpose Justification
