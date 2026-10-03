@@ -166,6 +166,10 @@ class SOCToolkit {
     this._debounceTimers = {};
     // Cache for OSINT links to avoid regenerating
     this._osintLinksCache = new Map();
+    // Tool cards: one registry drives persistence (socSettings.toolCards),
+    // the reconciler and the resize wiring.
+    this.TOOL_CARD_IDS = ['filehash', 'transform', 'regex', 'unfurl'];
+    this.toolCards = {};
     // Tools tab: registry-driven transforms, not scattered conditionals.
     // fn throws on bad input; runTextTool catches and shows the message.
     this.TEXT_TOOLS = [
@@ -712,10 +716,19 @@ class SOCToolkit {
     el('transformRunBtn')?.addEventListener('click', () => this.runTextTool());
     el('transformCopyBtn')?.addEventListener('click', () => this.copyTransformOutput());
     el('transformReuseBtn')?.addEventListener('click', () => this.useTransformOutputAsInput());
-    el('regexRunBtn')?.addEventListener('click', () => this.runRegexTool());
+    // Regex re-runs live on input; there is no Run button.
+    el('regexPatternInput')?.addEventListener('input', () => this._queueRegexTool());
+    el('regexFlagsInput')?.addEventListener('input', () => this._queueRegexTool());
+    el('regexTextInput')?.addEventListener('input', () => this._queueRegexTool());
     el('regexPresetSelect')?.addEventListener('change', (e) => this.applyRegexPreset(e.target.value));
     el('urlUnfurlBtn')?.addEventListener('click', () => this.renderUrlUnfurl());
     el('urlExtractBtn')?.addEventListener('click', () => this.renderExtractedUrls());
+
+    // Tool cards: persist collapse/expand (details toggle) and wire resize grips
+    for (const id of this.TOOL_CARD_IDS) {
+      document.getElementById(`toolCard_${id}`)?.addEventListener('toggle', () => this._onToolCardToggle(id));
+      this._setupToolCardResize(id);
+    }
 
     // Header controls
     el('floatBtn')?.addEventListener('click', () => this.toggleFloat());
@@ -1854,10 +1867,13 @@ class SOCToolkit {
           this.osintLinksBackground = s.osintLinksBackground ?? true;
           this.navLayout = s.navLayout === 'sidebar' ? 'sidebar' : 'tabs';
           this.actionOpensPanel = s.actionOpensPanel ?? false;
+          // Tools tab cards: collapse state + persisted body height
+          this.toolCards = this._normalizeToolCards(s.toolCards);
           // Apply the theme
           this.applyTheme(this.currentTheme);
           this._applyGraphCollapsed();
           this.applyWindowLayout();
+          this.applyToolCardState();
 
           // Checkboxes were bound with construction-time defaults; sync them
           // to the restored state.
@@ -1931,7 +1947,9 @@ class SOCToolkit {
         this.graphCollapsed = false;
         this.enableGraph = true;
         this.currentTheme = 'arc';
+        this.toolCards = this._normalizeToolCards();
         this.applyTheme(this.currentTheme);
+        this.applyToolCardState();
         resolve();
       }
     });
@@ -4110,6 +4128,83 @@ class SOCToolkit {
     if (inputEl && outputEl) inputEl.value = outputEl.textContent;
   }
 
+  // === Tool cards: collapsible (details) + drag-resizable body ===
+  // State lives in socSettings.toolCards: { filehash: { open: true, height: 0 }, ... }
+
+  _normalizeToolCards(stored) {
+    const cards = {};
+    for (const id of this.TOOL_CARD_IDS) {
+      const c = (stored && stored[id]) || {};
+      cards[id] = { open: c.open !== false, height: Number(c.height) || 0 };
+    }
+    return cards;
+  }
+
+  // Single reconciler: push persisted card state onto the DOM.
+  applyToolCardState() {
+    for (const id of this.TOOL_CARD_IDS) {
+      const details = document.getElementById(`toolCard_${id}`);
+      if (!details) continue;
+      const state = this.toolCards[id] || { open: true, height: 0 };
+      details.open = state.open;
+      const body = document.getElementById(`toolCardBody_${id}`);
+      if (body) body.style.height = state.height > 0 ? state.height + 'px' : '';
+    }
+  }
+
+  _saveToolCards() {
+    try {
+      // Read-modify-write: socSettings is shared with content.js and other popup paths.
+      chrome.storage.local.get(['socSettings'], (res) => {
+        const socSettings = Object.assign({}, res.socSettings, { toolCards: this.toolCards });
+        chrome.storage.local.set({ socSettings });
+      });
+    } catch (e) {
+      console.error('Failed to save tool card state:', e);
+    }
+  }
+
+  _onToolCardToggle(id) {
+    const details = document.getElementById(`toolCard_${id}`);
+    if (!details) return;
+    this.toolCards[id] = Object.assign({}, this.toolCards[id], { open: details.open });
+    this._saveToolCards();
+  }
+
+  clampCardHeight(height, min = 120, max = 900) {
+    return Math.min(max, Math.max(min, Math.round(Number(height) || 0)));
+  }
+
+  _setupToolCardResize(id) {
+    const grip = document.getElementById(`toolGrip_${id}`);
+    const body = document.getElementById(`toolCardBody_${id}`);
+    if (!grip || !body) return;
+    let dragging = false;
+    let startY = 0;
+    let startH = 0;
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      startY = e.clientY;
+      startH = body.offsetHeight || parseInt(body.style.height, 10) || 0;
+      try { grip.setPointerCapture(e.pointerId); } catch (err) { /* best-effort */ }
+      e.preventDefault();
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      body.style.height = this.clampCardHeight(startH + (e.clientY - startY)) + 'px';
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { grip.releasePointerCapture(e.pointerId); } catch (err) { /* not captured */ }
+      this.toolCards[id] = Object.assign({}, this.toolCards[id], { height: parseInt(body.style.height, 10) || 0 });
+      this._saveToolCards();
+    };
+    grip.addEventListener('pointerup', endDrag);
+    grip.addEventListener('pointercancel', endDrag);
+  }
+
   // Pure regex core: never throws — invalid patterns come back as { error }.
   runRegex(pattern, flags, text) {
     const matches = [];
@@ -4138,6 +4233,12 @@ class SOCToolkit {
     const flagsEl = document.getElementById('regexFlagsInput');
     if (patternEl) patternEl.value = preset.pattern;
     if (flagsEl) flagsEl.value = preset.flags || 'g';
+    this._queueRegexTool();
+  }
+
+  // Live matching: coalesce input bursts into one run.
+  _queueRegexTool() {
+    this.debounce('regexTool', () => this.runRegexTool(), 150);
   }
 
   runRegexTool() {

@@ -903,6 +903,113 @@ async function main() {
     assert.strictEqual(stored.investigationNotes, undefined, 'notes key must be removed after init');
   });
 
+  console.log('\n--- tool cards ---');
+
+  await test('clampCardHeight enforces the min and max table', () => {
+    assert.strictEqual(toolkit.clampCardHeight(10), 120);
+    assert.strictEqual(toolkit.clampCardHeight(-5), 120);
+    assert.strictEqual(toolkit.clampCardHeight(2000), 900);
+    assert.strictEqual(toolkit.clampCardHeight(300.6), 301, 'must round to whole pixels');
+    assert.strictEqual(toolkit.clampCardHeight(300), 300);
+  });
+
+  await test('popup.html: four tool cards are collapsible details with grips', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'popup.html'), 'utf8');
+    for (const id of toolkit.TOOL_CARD_IDS) {
+      assert.ok(html.includes(`id="toolCard_${id}"`), `toolCard_${id} missing`);
+      assert.ok(html.includes(`id="toolCardBody_${id}"`), `toolCardBody_${id} missing`);
+      assert.ok(html.includes(`id="toolGrip_${id}"`), `toolGrip_${id} missing`);
+    }
+    assert.ok(/<details class="settings-section" id="toolCard_filehash"/.test(html),
+      'cards must use the settings-section details idiom');
+    assert.ok(/tool-card-grip/.test(html), 'grip class missing');
+  });
+
+  await test('tool card toggle persists its open state', async () => {
+    const details = document.getElementById('toolCard_transform');
+    const toggle = details._listeners.toggle;
+    assert.ok(toggle, 'toggle handler not bound');
+    details.open = false;
+    toggle();
+    assert.strictEqual(toolkit.toolCards.transform.open, false, 'in-memory state must update');
+    const stored = await new Promise((resolve) => storage.get(['socSettings'], resolve));
+    assert.strictEqual(stored.socSettings.toolCards.transform.open, false, 'must persist');
+    storage.remove(['socSettings']);
+  });
+
+  await test('loadSettings applies a seeded closed card and its height', async () => {
+    const details = document.getElementById('toolCard_filehash');
+    const body = document.getElementById('toolCardBody_filehash');
+    storage.set({ socSettings: { toolCards: { filehash: { open: false, height: 260 } } } });
+    await toolkit.loadSettings();
+    assert.strictEqual(details.open, false, 'seeded closed card must stay closed');
+    assert.strictEqual(body.style.height, '260px', 'seeded height must apply');
+    assert.strictEqual(document.getElementById('toolCard_transform').open, true, 'default is open');
+    assert.strictEqual(document.getElementById('toolCardBody_transform').style.height, '', 'default height is unset');
+    storage.remove(['socSettings']);
+  });
+
+  await test('tool card grip drag resizes the body clamped and persists', async () => {
+    const body = document.getElementById('toolCardBody_regex');
+    const grip = document.getElementById('toolGrip_regex');
+    const { pointerdown: down, pointermove: move, pointerup: up } = grip._listeners;
+    assert.ok(down && move && up, 'grip pointer handlers not bound');
+    body.style.height = '200px';
+    down({ button: 0, pointerId: 3, clientY: 500, preventDefault() {} });
+    move({ pointerId: 3, clientY: 660 });
+    assert.strictEqual(body.style.height, '360px', 'drag delta must apply from the drag start');
+    move({ pointerId: 3, clientY: 9000 });
+    assert.strictEqual(body.style.height, '900px', 'must clamp to the max');
+    move({ pointerId: 3, clientY: -5000 });
+    assert.strictEqual(body.style.height, '120px', 'must clamp to the min');
+    up({ pointerId: 3 });
+    const stored = await new Promise((resolve) => storage.get(['socSettings'], resolve));
+    assert.strictEqual(stored.socSettings.toolCards.regex.height, 120, 'final height must persist');
+    move({ pointerId: 3, clientY: 9000 });
+    assert.strictEqual(body.style.height, '120px', 'no moves after pointerup');
+    storage.remove(['socSettings']);
+  });
+
+  console.log('\n--- live regex ---');
+
+  await test('regex matching runs live on input, no Run button', async () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'popup.html'), 'utf8');
+    assert.ok(!html.includes('regexRunBtn'), 'the Run button must be gone from the markup');
+    const pattern = document.getElementById('regexPatternInput');
+    const text = document.getElementById('regexTextInput');
+    assert.ok(pattern._listeners.input, 'pattern input handler not bound');
+    assert.ok(text._listeners.input, 'text input handler not bound');
+    pattern.value = '(\\w+)@(\\w+\\.com)';
+    text.value = 'foo@bar.com nope baz@qux.com';
+    pattern._listeners.input();
+    text._listeners.input();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const out = document.getElementById('regexResults').innerHTML;
+    assert.ok(out.includes('foo@bar.com') && out.includes('baz@qux.com'), out);
+    assert.ok(out.includes('<span>2</span>'), 'match count missing: ' + out);
+  });
+
+  await test('invalid pattern renders the live error row after the debounce', async () => {
+    const pattern = document.getElementById('regexPatternInput');
+    pattern.value = '[unclosed';
+    pattern._listeners.input();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const out = document.getElementById('regexResults').innerHTML;
+    assert.ok(out.includes('Error'), 'error row must render live: ' + out);
+  });
+
+  await test('choosing a preset triggers a live run', async () => {
+    document.getElementById('regexTextInput').value = 'ping 1.2.3.4 now';
+    const presetSel = document.getElementById('regexPresetSelect');
+    const change = presetSel._listeners.change;
+    assert.ok(change, 'preset change handler not bound');
+    change({ target: { value: 'ipv4' } });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.ok(document.getElementById('regexPatternInput').value.length > 10, 'preset pattern must load');
+    assert.ok(document.getElementById('regexResults').innerHTML.includes('1.2.3.4'),
+      'preset change must re-run the match');
+  });
+
   console.log('\nTest Summary:');
   console.log('  Passed:', passed);
   console.log('  Failed:', failed);
