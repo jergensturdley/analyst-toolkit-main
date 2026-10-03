@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — SOC Analyst Toolkit
 
-Store copy reflecting v0.5.7. Host lists and permission names match
+Store copy reflecting v0.5.8. Host lists and permission names match
 `manifest.json` exactly; update both together on any permission change.
 
 ## Store Metadata
@@ -209,6 +209,7 @@ This extension does not load or execute any remote code. All logic runs locally 
 
 | Version | Date | Notes |
 |---|---|---|
+| 0.5.8 | 2026-10-02 | Tools tab: transform workbench, live regex tester, URL unfurl, relocated file hashing on collapsible and resizable cards; Notes tab removed |
 | 0.5.7 | 2026-10-02 | Chrome side panel (dock from the popup header or Settings, optional toolbar-click docking) with a responsive narrow layout shared with small floating windows; version-drift CI guard; screenshot pipeline fixes |
 | 0.5.6 | 2026-10-02 | Sidebar navigation and a resizable floating window with Esc-to-close; OSINT links open in background tabs so the popup stays open; 28 fixes across IOC parsing, popup state and enrichment agents |
 | 0.5.5 | 2026-09-30 | Live IOC results search box; expand/collapse-all-links choice remembered; toggle-state, version-label and packaging fixes |

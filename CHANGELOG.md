@@ -2,7 +2,7 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
-## [Unreleased]
+## [0.5.8] - 2026-10-02
 
 ### Added
 
