@@ -47,6 +47,7 @@ async function loadBackgroundToolkit(root) {
   const src = fs.readFileSync(path.join(root, 'background.js'), 'utf8');
   const storageArea = makeStorageArea();
   const tabsCreated = [];
+  const menuCreated = [];
   const listeners = { installed: [], message: [], command: [], windowRemoved: [] };
   const sidePanelCalls = { setOptions: [], setPanelBehavior: [] };
 
@@ -79,7 +80,7 @@ async function loadBackgroundToolkit(root) {
       storage: { local: storageArea },
       contextMenus: {
         removeAll: (cb) => cb && cb(),
-        create: () => {},
+        create: (opts) => { menuCreated.push(opts && opts.id); },
         onClicked: { addListener: () => {} },
       },
       action: {
@@ -155,6 +156,7 @@ async function loadBackgroundToolkit(root) {
     exhaustRateLimit: grab('((provider, n) => { for (let i = 0; i < n; i++) rateLimiter.recordRequest(provider); })'),
     storageData: storageArea._data,
     tabsCreated,
+    menuCreated,
     fetchCalls,
     sidePanelCalls,
     listeners,
