@@ -15,13 +15,15 @@ fi
 
 # 2. A built zip must exist.
 shopt -s nullglob
-ZIPS=( dist/soc-analyst-toolkit-*.zip )
+# Verify the newest CHROME build; the firefox- zips match the prefix and
+# dist/ accumulates artifacts across releases.
+ZIPS=( dist/soc-analyst-toolkit-[0-9]*.zip )
 shopt -u nullglob
 if [ "${#ZIPS[@]}" -eq 0 ]; then
-  echo "FAIL: no dist/soc-analyst-toolkit-*.zip found. Run scripts/build-store-package.sh first." >&2
+  echo "FAIL: no dist/soc-analyst-toolkit-<version>.zip found. Run scripts/build-store-package.sh first." >&2
   exit 1
 fi
-ZIP="${ZIPS[0]}"
+ZIP="$(printf '%s\n' "${ZIPS[@]}" | sort -V | tail -1)"
 echo "Checking: $ZIP"
 
 # 3. Extract the zip into a temp dir and inspect.
