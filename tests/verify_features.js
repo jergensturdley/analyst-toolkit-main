@@ -893,13 +893,46 @@ test('askAiDefaultConfig: defaults to claude.ai/new, empty template', () => {
 
 console.log(' [PASS] Ask AI config + prompt builder');
 
-// ==================== Privacy & Consent (store-readiness item 7) ====================
-console.log('\n--- Privacy & Consent Tests ---');
+// ==================== Version consistency (release discipline) ====================
+console.log('\n--- Version Consistency Tests ---');
 
 const fs = require('fs');
 const path = require('path');
 const popupHtml = fs.readFileSync(path.join(__dirname, '..', 'popup.html'), 'utf8');
 const popupJs = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
+
+// Every surface that carries the version must agree with manifest.json. Bump
+// them together in the release commit or CI fails here; see the Release
+// section of CLAUDE.md.
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
+const storeListing = fs.readFileSync(path.join(__dirname, '..', 'docs', 'STORE_LISTING.md'), 'utf8');
+
+test('package.json version matches the manifest', () => {
+  assert.strictEqual(pkg.version, manifest.version,
+    `package.json ${pkg.version} != manifest ${manifest.version}`);
+});
+
+test('popup.html version fallback matches the manifest', () => {
+  assert.ok(popupHtml.includes(`id="versionLabel">v${manifest.version}<`),
+    `popup.html #versionLabel fallback must read v${manifest.version}`);
+});
+
+test('CHANGELOG has a released section for the manifest version', () => {
+  assert.ok(changelog.includes(`## [${manifest.version}]`),
+    `CHANGELOG.md missing a '## [${manifest.version}]' section`);
+});
+
+test('store listing header reflects the manifest version', () => {
+  assert.ok(storeListing.includes(`reflecting v${manifest.version}`),
+    `docs/STORE_LISTING.md header must say 'reflecting v${manifest.version}'`);
+});
+
+console.log(' [PASS] Version consistency');
+
+// ==================== Privacy & Consent (store-readiness item 7) ====================
+console.log('\n--- Privacy & Consent Tests ---');
 
 test('consent modal markup is present in popup.html', () => {
   for (const id of ['consentModal', 'consentModalTitle', 'consentModalBody', 'consentAllowBtn', 'consentDenyBtn', 'consentCloseBtn']) {
