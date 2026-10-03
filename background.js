@@ -1792,19 +1792,6 @@ function setupContextMenus() {
   chrome.contextMenus.create({ id: 'cyberchef-base45-decode', parentId: 'cyberchef-formatting', title: 'Base45 Decode', contexts: ['selection'] });
   chrome.contextMenus.create({ id: 'cyberchef-safelinks-decode', parentId: 'cyberchef-formatting', title: 'Decode Microsoft Safelinks', contexts: ['selection'] });
   chrome.contextMenus.create({ id: 'cyberchef-vtgrep', parentId: 'cyberchef-formatting', title: 'To VirusTotal Grep Query', contexts: ['selection'] });
-
-  // Investigation Tools
-  chrome.contextMenus.create({
-    id: 'separator2',
-    type: 'separator',
-    contexts: ['selection']
-  });
-
-  chrome.contextMenus.create({
-    id: 'add-to-notes',
-    title: 'Add to Investigation Notes',
-    contexts: ['selection']
-  });
   });
 }
 
@@ -1956,10 +1943,6 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       
     case 'extract-strings':
       extractStrings(selectedText);
-      break;
-      
-    case 'add-to-notes':
-      addToInvestigationNotes(selectedText);
       break;
   }
 });
@@ -2307,18 +2290,6 @@ function extractStrings(text) {
   const result = strings.join('\n');
   copyToClipboard(result);
   showNotification('Strings Extracted', `${strings.length} strings copied to clipboard`);
-}
-
-function addToInvestigationNotes(text) {
-  const timestamp = new Date().toISOString();
-  const note = `[${timestamp}] ${text}`;
-  
-  chrome.storage.local.get(['investigationNotes'], (result) => {
-    const notes = result.investigationNotes || [];
-    notes.push(note);
-    chrome.storage.local.set({ investigationNotes: notes });
-    showNotification('Note Added', 'Added to investigation notes');
-  });
 }
 
 async function copyToClipboard(text) {
