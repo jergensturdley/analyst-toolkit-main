@@ -1232,6 +1232,122 @@
       background: linear-gradient(135deg, transparent 50%, var(--button-active) 50%);
     }
 
+    /* Chrome side panel (opened at popup.html?panel=1): fill the panel
+       viewport; the floating-window controls make no sense there. */
+    body.panel {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    body.panel #floatBtn,
+    body.panel #closeBtn {
+      display: none;
+    }
+
+    /* Narrow layout, shared by the side panel and small floating windows
+       (≤430px): segmented pill nav along the top, full-width content below.
+       The .nav-sidebar variants neutralize the optional left rail at this
+       width (equal specificity, later in source). */
+    body.panel,
+    body.panel.nav-sidebar {
+      display: flex;
+      flex-direction: column;
+    }
+
+    body.panel .tab-nav,
+    body.panel.nav-sidebar .tab-nav {
+      flex-direction: row;
+      gap: 4px;
+      padding: 6px 8px;
+      border-right: none;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    body.panel .tab-btn,
+    body.panel.nav-sidebar .tab-btn {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
+      margin-bottom: 0;
+      padding: 8px 4px;
+      font-size: 11px;
+      border-left: none;
+      border-bottom: none;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    body.panel .tab-btn i,
+    body.panel.nav-sidebar .tab-btn i {
+      display: none; /* labels-only pills keep the nav to one ~40px row */
+    }
+
+    body.panel .tab-btn.active,
+    body.panel.nav-sidebar .tab-btn.active {
+      background: var(--bg-accent-dark);
+      color: var(--button-active);
+    }
+
+    body.panel.nav-sidebar .tab-content {
+      grid-column: auto;
+      grid-row: auto;
+    }
+
+    /* Spacious but never overflowing: padding up, wrapping button groups,
+       2-up stats, and the 400px float-mode floor relaxed. */
+    body.panel .tab-content { padding: 14px 12px; }
+    body.panel .ioc-stats { grid-template-columns: repeat(2, 1fr); }
+    body.panel .btn-group { flex-wrap: wrap; }
+    body.panel .ioc-item { padding: 12px 10px; }
+    body.panel.float-mode { min-width: 0; }
+
+    /* Same narrow rules for small floating windows (~430px and below). */
+    @media (max-width: 430px) {
+      body.nav-sidebar {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .tab-nav {
+        gap: 4px;
+        padding: 6px 8px;
+      }
+      body.nav-sidebar .tab-nav {
+        flex-direction: row;
+        border-right: none;
+        border-bottom: 1px solid var(--border-primary);
+      }
+
+      .tab-btn {
+        padding: 8px 4px;
+        font-size: 11px;
+        border-bottom: none;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .tab-btn i { display: none; }
+      body.nav-sidebar .tab-btn {
+        flex: 1;
+        justify-content: center;
+        text-align: center;
+        margin-bottom: 0;
+        border-left: none;
+        border-bottom: none;
+      }
+      .tab-btn.active { background: var(--bg-accent-dark); }
+      body.nav-sidebar .tab-btn.active { border-left-color: transparent; }
+      body.nav-sidebar .tab-content {
+        grid-column: auto;
+        grid-row: auto;
+      }
+
+      .tab-content { padding: 14px 12px; }
+      .ioc-stats { grid-template-columns: repeat(2, 1fr); }
+      .btn-group { flex-wrap: wrap; }
+      .ioc-item { padding: 12px 10px; }
+      body.float-mode { min-width: 0; }
+    }
+
 /* Snippet Tab Buttons */
 .snippet-actions .btn {
   margin-left: 6px;
@@ -2086,6 +2202,9 @@
       <button class="control-btn" id="showKeyboardShortcuts" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts">
         <i class="fa-solid fa-keyboard" aria-hidden="true"></i>
       </button>
+      <button class="control-btn" id="sidePanelBtn" title="Open in sidebar" aria-label="Open in sidebar">
+        <i class="fa-solid fa-table-columns" aria-hidden="true"></i>
+      </button>
       <button class="control-btn" id="floatBtn" title="Open in floating window" aria-label="Open in floating window">
         <i class="fa-solid fa-external-link-alt" aria-hidden="true"></i>
       </button>
@@ -2516,6 +2635,18 @@
             <i class="fa-solid fa-external-link-alt" aria-hidden="true"></i> Open Floating Window
           </button>
           <span class="settings-hint">Persists position and size between sessions.</span>
+        </div>
+        <div class="settings-row-inline" id="sidePanelRow">
+          <label class="settings-label">Side Panel</label>
+          <button id="toggleSidePanelBtn" class="btn btn-secondary btn-small">
+            <i class="fa-solid fa-table-columns" aria-hidden="true"></i> Open Sidebar
+          </button>
+          <span class="settings-hint">Chrome side panel beside the page (Chrome only).</span>
+        </div>
+        <div class="settings-row-inline" id="actionOpensPanelRow">
+          <label class="settings-label" style="min-width:auto;">
+            <input type="checkbox" id="actionOpensPanelToggle"> Toolbar click opens the sidebar instead of this popup
+          </label>
         </div>
       </div>
     </div>

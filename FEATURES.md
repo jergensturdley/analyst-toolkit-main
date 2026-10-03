@@ -161,7 +161,13 @@ Individual buttons for:
 - Color-coded IOC badges
 - Themed OSINT links
 
-## 🪟 Floating Window & Layout
+## 🪟 Floating Window, Side Panel & Layout
+
+### Side Panel
+- Open the toolkit in the browser's side panel from the header button or Settings → Window & Layout (Chrome only)
+- Narrow layout: segmented pill navigation along the top, full-width content below, statistics in two columns, wrapping button groups — no horizontal scrolling at panel width
+- Optional: "Toolbar click opens the sidebar instead of this popup" toggle in Settings → Window & Layout
+- Firefox has no side panel API, so the entries are hidden there and the Firefox build strips the `side_panel` manifest key
 
 ### Floating Window
 - Open the toolkit in a persistent window from the header button or Settings → Window & Layout

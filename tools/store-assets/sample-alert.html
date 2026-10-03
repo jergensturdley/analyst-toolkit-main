@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Security Alert #48211</title>
+<style>
+  :root { color-scheme: light; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: #f6f8fa; color: #1f2328; padding: 24px 22px;
+  }
+  .mail { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; overflow: hidden; }
+  .mail-head { padding: 14px 18px; border-bottom: 1px solid #d0d7de; background: #fff; }
+  .badge { display: inline-block; background: #cf222e; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .5px; padding: 3px 8px; border-radius: 10px; }
+  .subject { font-size: 15px; font-weight: 700; margin-top: 8px; }
+  .meta { font-size: 12px; color: #57606a; margin-top: 6px; }
+  .mail-body { padding: 16px 18px; font-size: 13px; line-height: 1.65; }
+  .mail-body p + p { margin-top: 10px; }
+  code { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; padding: 1px 5px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .field { font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="mail">
+    <div class="mail-head">
+      <span class="badge">HIGH</span>
+      <div class="subject">[SOC] Suspicious outbound connection — workstation WS-042</div>
+      <div class="meta">From: siem@corp.example &nbsp;•&nbsp; To: soc-tier1@corp.example &nbsp;•&nbsp; 09:14 UTC</div>
+    </div>
+    <div class="mail-body">
+      <p><span class="field">Detection:</span> Beacon-like outbound traffic from <code>WS-042 (10.20.30.40)</code> to <code>198.51.100.42</code> with SNI <code>malicious.example.org</code>.</p>
+      <p><span class="field">Payload:</span> dropped file with SHA-256 <code>5d41402abc4b2a76b9719d911017c592a3ae0e2f4e6f9c1d2b3c4d5e6f7a8b9c</code>. CVE-2024-3094 referenced in the alert rule.</p>
+      <p><span class="field">Initial access:</span> user clicked a phishing email from <code>attacker@evil.example.com</code>; MITRE technique <code>T1566.001</code> suspected. Ransom note listed Bitcoin address <code>1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa</code>. Local MAC observed: <code>00:1B:44:11:3A:B7</code>.</p>
+      <p><span class="field">Action requested:</span> triage the indicators, check the pivots, and escalate if confirmed.</p>
+    </div>
+  </div>
+</body>
+</html>

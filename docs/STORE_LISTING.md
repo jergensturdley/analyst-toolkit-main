@@ -89,6 +89,7 @@ This extension performs one purpose: it extracts, transforms, and links IOCs for
 | `notifications` | Shows brief progress and success messages during enrichment and copy actions. No push notifications. |
 | `contextMenus` | Adds right-click entries ("Lookup in VirusTotal", "Analyze with SOC Toolkit") for fast pivoting. |
 | `scripting` | Injects a minimal content script into the active tab to capture selected text when you invoke the extension. |
+| `sidePanel` | Lets the toolkit open in the browser's side panel when you click "Open in sidebar" or turn on the toolbar-click option. Chrome-only; grants no page access. |
 | Host permissions for OSINT domains | Opens OSINT lookup links and enrichment requests to the exact hosts listed below. No `<all_urls>` permission. Custom user-added URLs open as normal browser tabs. |
 
 ---
@@ -115,6 +116,12 @@ Store format: 1280×800 JPEG. `screenshots/store/screenshot-1..6.jpg` are the up
 3. `screenshot-3.jpg` — verdict chip, inline provider summary, and the enrichment detail panel
 4. `screenshot-4.jpg` — IOC relation graph
 5. `screenshot-5.jpg` / `screenshot-6.jpg` — Settings, enrichment providers and API keys
+6. `screenshot-7.jpg` — sidebar navigation layout (`scripts/capture-feature-shots.js`)
+7. `screenshot-8.jpg` — floating window with the resize grip (`scripts/capture-feature-shots.js`)
+8. `screenshot-9.jpg` — side panel triaging the sample alert beside the page (`scripts/capture-feature-shots.js`)
+
+The store accepts up to five screenshots per listing: pick five of the nine
+above per release (7-9 showcase the current features).
 
 ---
 

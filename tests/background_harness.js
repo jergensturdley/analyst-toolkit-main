@@ -48,6 +48,7 @@ async function loadBackgroundToolkit(root) {
   const storageArea = makeStorageArea();
   const tabsCreated = [];
   const listeners = { installed: [], message: [], command: [], windowRemoved: [] };
+  const sidePanelCalls = { setOptions: [], setPanelBehavior: [] };
 
   let fetchImpl = async () => { throw new Error('harness: no fetch impl set'); };
   const fetchCalls = [];
@@ -97,6 +98,10 @@ async function loadBackgroundToolkit(root) {
         onRemoved: { addListener: (fn) => listeners.windowRemoved.push(fn) },
         onBoundsChanged: { addListener: () => {}, removeListener: () => {} },
       },
+      sidePanel: {
+        setOptions: (options) => { sidePanelCalls.setOptions.push(options); return Promise.resolve(); },
+        setPanelBehavior: (options) => { sidePanelCalls.setPanelBehavior.push(options); return Promise.resolve(); },
+      },
       notifications: { create: () => {} },
       scripting: { executeScript: async () => {} },
       commands: { onCommand: { addListener: (fn) => listeners.command.push(fn) } },
@@ -118,6 +123,7 @@ async function loadBackgroundToolkit(root) {
     fetchURLhaus: typeof fetchURLhaus === 'function' ? fetchURLhaus : null,
     agentCacheKeysToPrune: typeof agentCacheKeysToPrune === 'function' ? agentCacheKeysToPrune : null,
     setCachedAgentResult: typeof setCachedAgentResult === 'function' ? setCachedAgentResult : null,
+    configureSidePanel: typeof configureSidePanel === 'function' ? configureSidePanel : null,
   })`);
 
   const messageListener = listeners.message[0];
@@ -150,6 +156,8 @@ async function loadBackgroundToolkit(root) {
     storageData: storageArea._data,
     tabsCreated,
     fetchCalls,
+    sidePanelCalls,
+    listeners,
     setFetchImpl: (fn) => { fetchImpl = fn; },
     resetState,
     dispatch,

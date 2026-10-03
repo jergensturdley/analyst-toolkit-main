@@ -1,13 +1,44 @@
 // SOC Analyst Toolkit — Playwright screenshot capture
 // Loads the unpacked extension in Chrome-for-Testing and captures
 // IOC parsing, enrichment, graph, and settings screenshots.
+// Prerequisites: npm install && npx playwright install chromium,
+// plus a built package (scripts/build-store-package.sh → dist/staging).
 
-const { chromium } = require('playwright');
+let chromium;
+try {
+  ({ chromium } = require('playwright'));
+} catch (e) {
+  console.error('Playwright is not installed. Run: npm install && npx playwright install chromium');
+  process.exit(1);
+}
 const path = require('path');
 const fs = require('fs');
 
 const EXT_PATH = path.resolve(__dirname, '..', 'dist', 'staging');
 const OUT_DIR = path.resolve(__dirname);
+
+// Chrome binary: explicit override, else the newest cached Playwright
+// chromium build (the exact build number drifts with each Playwright
+// release, so nothing is hardcoded), else whatever this Playwright
+// expects.
+function resolveChromePath() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+  const cache = path.join(process.env.HOME, 'Library/Caches/ms-playwright');
+  if (fs.existsSync(cache)) {
+    const builds = fs.readdirSync(cache)
+      .filter((d) => /^chromium-\d+$/.test(d))
+      .sort()
+      .reverse();
+    for (const b of builds) {
+      const p = path.join(cache, b, 'chrome-mac-arm64',
+        'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+      if (fs.existsSync(p)) return p;
+      const pX64 = p.replace('chrome-mac-arm64', 'chrome-mac');
+      if (fs.existsSync(pX64)) return pX64;
+    }
+  }
+  return chromium.executablePath();
+}
 
 const SAMPLE_IOCS = `Suspicious activity observed from 198.51.100.42 contacting evil[.]example[.]com
 and hxxps://malware[.]example[.]net/payload.exe at 2026-07-09 03:14 UTC.
@@ -60,8 +91,7 @@ async function shot(page, file, opts = {}) {
   // The cached "chrome-headless-shell" binary fails on this Mac (Mach port
   // permission denied). Branded Google Chrome ignores --load-extension since
   // ~v137, so default to the Playwright-cached Chrome-for-Testing binary.
-  const chromePath = process.env.CHROME_PATH
-    || path.join(process.env.HOME, 'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+  const chromePath = resolveChromePath();
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false, // Extensions only load with a window server on macOS.

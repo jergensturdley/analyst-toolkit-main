@@ -17,7 +17,8 @@ npm test   # tests/verify_features.js + tests/verify_popup.js + tests/verify_bac
 # Build store packages (clean tree required)
 #   scripts/build-store-package.sh            → dist/soc-analyst-toolkit-<v>.zip (Chrome)
 #   scripts/build-store-package.sh firefox    → dist/soc-analyst-toolkit-firefox-<v>.xpi
-#     (same source; manifest patched to event-page background + gecko settings)
+#     (same source; manifest patched to event-page background + gecko settings,
+#      and the Chrome-only side_panel key is stripped — Firefox has no sidePanel API)
 
 # Release (manual):
 #   0. Bump the version EVERYWHERE in one commit — CI fails `npm test` if any drifts:
@@ -43,7 +44,7 @@ No linter, formatter, or bundler is configured. `tests/verify_features.js` regex
 
 | File | Role |
 |---|---|
-| `manifest.json` | MV3 manifest: permissions, commands, content/background/popup wiring |
+| `manifest.json` | MV3 manifest: permissions, commands, content/background/popup wiring, `side_panel` (Chrome-only — the Firefox build strips the key) |
 | `popup.html` / `popup.js` | The toolbar popup UI. The `SOCToolkit` class (popup.js:32) owns state, IOC parsing, OSINT link generation, graph rendering, snippets, settings, Ask-AI panel |
 | `background.js` | MV3 service worker. Owns cross-origin fetch (popup can't fetch directly), `RateLimiter` (background.js:51), cache I/O, the central `chrome.runtime.onMessage` router (background.js:2199), context menus, notifications |
 | `content.js` | Injected **on demand** via `chrome.scripting.executeScript` (`ensureContentScript` in background.js) — there is no `content_scripts` block in the manifest, so it is not auto-injected into every page. Handles `copyToClipboard`, `toggleSnippets`, `highlightIOCs`, `getSelectedText`, page-snippet UI. Listens via its own `chrome.runtime.onMessage` (content.js:16) |

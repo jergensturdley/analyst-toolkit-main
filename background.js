@@ -1581,6 +1581,23 @@ async function runUrlAgent(url, options = {}) {
   };
 }
 
+// Chrome-only side panel: pin the runtime options to the ?panel=1 layout so
+// the panel always opens with the narrow layout, and re-apply the persisted
+// toolbar-click preference — setPanelBehavior is browser runtime state that
+// resets on every browser restart. Firefox has no chrome.sidePanel (and the
+// Firefox build strips the manifest key).
+function configureSidePanel() {
+  if (!chrome.sidePanel?.setOptions) return;
+  chrome.sidePanel.setOptions({ path: 'popup.html?panel=1', enabled: true }).catch(() => {});
+  chrome.storage.local.get(['socSettings'])
+    .then((res) => {
+      if (res?.socSettings?.actionOpensPanel) {
+        chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+      }
+    })
+    .catch(() => {});
+}
+
 // Installation and setup handler
 chrome.runtime.onInstalled.addListener(async (details) => {
   // On first install, set default settings
@@ -1596,6 +1613,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
   // Always set up context menus on installation or update
   setupContextMenus();
+  configureSidePanel();
 });
 
 // NOTE: no floating-window restore on onInstalled/onStartup. A browser quit
@@ -1603,6 +1621,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 // "isOpen" flag stayed true forever and the popout auto-opened on every
 // browser launch. The floating window now opens only on user action
 // (toolbar button / toggleFloat); only its geometry is persisted.
+
+// Service-worker restarts never re-fire onInstalled, so re-pin the side
+// panel options on every top-level startup too.
+configureSidePanel();
 
 // Function to set up all context menus
 function setupContextMenus() {
