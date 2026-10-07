@@ -2017,6 +2017,11 @@ class SOCToolkit {
       // Writing a fresh object here used to wipe those keys every time the
       // theme or a toggle changed.
       chrome.storage.local.get(['socSettings'], (res) => {
+        // Errors surface asynchronously via lastError, not as throws.
+        if (chrome.runtime.lastError) {
+          console.warn('Failed to read settings before save:', chrome.runtime.lastError.message);
+          return;
+        }
         const socSettings = Object.assign({}, res.socSettings, {
           autoAnalyze: this.autoAnalyze,
           autoEnrich: this.autoEnrich,
@@ -2026,9 +2031,14 @@ class SOCToolkit {
           theme: this.currentTheme,
           navLayout: this.navLayout,
           osintLinksBackground: this.osintLinksBackground,
-          actionOpensPanel: this.actionOpensPanel
+          actionOpensPanel: this.actionOpensPanel,
+          toolCards: this.toolCards
         });
-        chrome.storage.local.set({ socSettings });
+        chrome.storage.local.set({ socSettings }, () => {
+          if (chrome.runtime.lastError) {
+            console.warn('Failed to save settings:', chrome.runtime.lastError.message);
+          }
+        });
       });
     } catch (e) {
       console.error('Failed to save settings:', e);
@@ -4149,7 +4159,10 @@ class SOCToolkit {
     const cards = {};
     for (const id of this.TOOL_CARD_IDS) {
       const c = (stored && stored[id]) || {};
-      cards[id] = { open: c.open !== false, height: Number(c.height) || 0 };
+      const h = Number(c.height) || 0;
+      // Clamp persisted heights here, at the boundary — the drag path
+      // clamps too, but stored values must never bypass the table.
+      cards[id] = { open: c.open !== false, height: h > 0 ? this.clampCardHeight(h) : 0 };
     }
     return cards;
   }
@@ -4159,30 +4172,24 @@ class SOCToolkit {
     for (const id of this.TOOL_CARD_IDS) {
       const details = document.getElementById(`toolCard_${id}`);
       if (!details) continue;
-      const state = this.toolCards[id] || { open: true, height: 0 };
-      details.open = state.open;
+      const state = this.toolCards[id];
+      // Only transition when the state actually differs: assigning
+      // details.open fires a real toggle event, which would write the
+      // just-loaded state straight back to storage on every popup open.
+      if (details.open !== state.open) details.open = state.open;
       const body = document.getElementById(`toolCardBody_${id}`);
       if (body) body.style.height = state.height > 0 ? state.height + 'px' : '';
-    }
-  }
-
-  _saveToolCards() {
-    try {
-      // Read-modify-write: socSettings is shared with content.js and other popup paths.
-      chrome.storage.local.get(['socSettings'], (res) => {
-        const socSettings = Object.assign({}, res.socSettings, { toolCards: this.toolCards });
-        chrome.storage.local.set({ socSettings });
-      });
-    } catch (e) {
-      console.error('Failed to save tool card state:', e);
     }
   }
 
   _onToolCardToggle(id) {
     const details = document.getElementById(`toolCard_${id}`);
     if (!details) return;
+    // No-op guard: skip the storage write when nothing changed (also
+    // covers toggle events fired by applyToolCardState during load).
+    if (this.toolCards[id] && this.toolCards[id].open === details.open) return;
     this.toolCards[id] = Object.assign({}, this.toolCards[id], { open: details.open });
-    this._saveToolCards();
+    this.saveSettings();
   }
 
   clampCardHeight(height, min = 120, max = 900) {
@@ -4213,14 +4220,27 @@ class SOCToolkit {
       dragging = false;
       try { grip.releasePointerCapture(e.pointerId); } catch (err) { /* not captured */ }
       this.toolCards[id] = Object.assign({}, this.toolCards[id], { height: parseInt(body.style.height, 10) || 0 });
-      this._saveToolCards();
+      this.saveSettings();
     };
     grip.addEventListener('pointerup', endDrag);
     grip.addEventListener('pointercancel', endDrag);
+    // Keyboard path for the separator role: arrows resize by 20px steps.
+    grip.tabIndex = 0;
+    grip.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      const cur = parseInt(body.style.height, 10) || body.offsetHeight || 0;
+      const next = this.clampCardHeight(cur + (e.key === 'ArrowUp' ? 20 : -20));
+      body.style.height = next + 'px';
+      this.toolCards[id] = Object.assign({}, this.toolCards[id], { height: next });
+      this.saveSettings();
+    });
   }
 
   // Pure regex core: never throws — invalid patterns come back as { error }.
-  runRegex(pattern, flags, text) {
+  // Match collection caps at maxMatches: broad patterns over large pastes
+  // used to be paced by the removed Run button; live matching needs the cap.
+  runRegex(pattern, flags, text, maxMatches = 500) {
     const matches = [];
     try {
       const re = new RegExp(pattern, flags || 'g');
@@ -4229,14 +4249,15 @@ class SOCToolkit {
         while ((m = re.exec(text)) !== null) {
           matches.push({ text: m[0], index: m.index, groups: m.slice(1) });
           if (m[0] === '') re.lastIndex++;
+          if (matches.length >= maxMatches) break;
         }
       } else {
         const m = re.exec(text);
         if (m) matches.push({ text: m[0], index: m.index, groups: m.slice(1) });
       }
-      return { matches, error: null };
+      return { matches, truncated: matches.length >= maxMatches, error: null };
     } catch (e) {
-      return { matches: [], error: e && e.message ? e.message : String(e) };
+      return { matches: [], truncated: false, error: e && e.message ? e.message : String(e) };
     }
   }
 
@@ -4261,14 +4282,27 @@ class SOCToolkit {
     const text = document.getElementById('regexTextInput')?.value ?? '';
     const out = document.getElementById('regexResults');
     if (!out) return;
+    // One-line SR announcement: the match list itself stays out of the
+    // live region so screen readers hear a summary, not the whole dump.
+    const status = document.getElementById('regexStatus');
+    const announce = (msg) => { if (status) status.textContent = msg; };
     const row = (label, value) => `<div class="settings-shortcut-row"><span>${this.escapeHtml(label)}</span><span>${this.escapeHtml(value)}</span></div>`;
-    const { matches, error } = this.runRegex(pattern, flags, text);
-    if (error) {
-      out.innerHTML = `<div class="settings-shortcut-row" style="color:var(--danger-color);"><span>Error</span><span>${this.escapeHtml(error)}</span></div>`;
+    // Empty pattern matches at every index — render the neutral state
+    // instead of one row per character position.
+    if (!pattern.trim()) {
+      out.innerHTML = '';
+      announce('enter a pattern to test');
       return;
     }
+    const { matches, truncated, error } = this.runRegex(pattern, flags, text);
+    if (error) {
+      out.innerHTML = `<div class="settings-shortcut-row" style="color:var(--danger-color);"><span>Error</span><span>${this.escapeHtml(error)}</span></div>`;
+      announce(`Error: ${error}`);
+      return;
+    }
+    announce(`${matches.length} matches${truncated ? ' (showing first 500)' : ''}`);
     if (!matches.length) {
-      out.innerHTML = row('Matches', '0');
+      out.innerHTML = '';
       return;
     }
     const rows = matches.map((m, i) => {
@@ -4277,7 +4311,7 @@ class SOCToolkit {
         : '';
       return row(`#${i + 1} @ index ${m.index}`, m.text + groups);
     }).join('');
-    out.innerHTML = row('Matches', String(matches.length)) + rows;
+    out.innerHTML = rows;
   }
 
   // Pure URL core using the URL API; never throws.

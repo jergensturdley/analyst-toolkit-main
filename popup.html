@@ -1536,9 +1536,12 @@
     .ioc-graph-header button.collapsed #graphCollapseChevron,
     .ioc-list-header button.collapsed #expandAllLinksChevron { transform: rotate(-90deg); }
 
-    /* Tool cards (Tools tab): resizable bodies with a bottom drag grip */
+    /* Tool cards (Tools tab): resizable bodies with a bottom drag grip.
+       overflow-y keeps fixed-height bodies from spilling or clipping
+       content taller than the persisted height. */
     .tool-card-body {
       position: relative;
+      overflow-y: auto;
     }
 
     /* Growing the card grows the working area */
@@ -1547,12 +1550,16 @@
     }
 
     .tool-card-grip {
-      position: absolute;
-      left: 0;
-      right: 0;
+      /* Sticky (not absolute) so the grip stays reachable when the body
+         scrolls; it rides the bottom of the visible body during overflow. */
+      position: sticky;
       bottom: 0;
+      flex: none;
       height: 7px;
       cursor: ns-resize;
+      /* Claim vertical drags for resizing; otherwise touch scrolling
+         fires pointercancel and the drag dies. */
+      touch-action: none;
       background: var(--border-secondary);
       opacity: 0.4;
       transition: opacity 0.15s;
@@ -1561,6 +1568,33 @@
     .tool-card-grip:hover {
       opacity: 1;
       background: var(--button-active);
+    }
+
+    /* Tool card summaries: shared collapse affordance, no inline styles.
+       The chevron rotates when the card is closed. */
+    details.settings-section > summary.tool-card-summary {
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+
+    details.settings-section > summary.tool-card-summary .fa-chevron-down {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-secondary);
+      transition: transform 0.15s;
+    }
+
+    details.settings-section:not([open]) > summary.tool-card-summary .fa-chevron-down {
+      transform: rotate(-90deg);
+    }
+
+    /* Screen-reader summary line for live regex results; the match list
+       itself stays out of the live region so SR users hear one line,
+       not the whole dump, per run. */
+    #regexStatus {
+      color: var(--text-secondary);
+      font-size: 12px;
     }
 
     .file-hash-controls {
@@ -2109,7 +2143,7 @@
         <i class="fa-solid fa-shield-halved"></i>
         SOC Toolkit
       </h1>
-      <div class="version" id="versionLabel">v0.5.8</div>
+      <div class="version" id="versionLabel">v0.6.0</div>
     </div>
     <div class="header-controls">
       <button class="control-btn" id="showKeyboardShortcuts" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts">
@@ -2444,9 +2478,9 @@
 
     <!-- File Hash Analysis (moved from the IOC tab to free vertical space) -->
     <details class="settings-section" id="toolCard_filehash" open>
-      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
+      <summary class="settings-section-header tool-card-summary">
         <i class="fa-solid fa-file-shield" aria-hidden="true"></i> File Hash Analysis
-        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
       </summary>
       <div class="settings-section-body tool-card-body" id="toolCardBody_filehash">
         <div class="file-hash-controls">
@@ -2472,9 +2506,9 @@
 
     <!-- Transform workbench -->
     <details class="settings-section" id="toolCard_transform" open>
-      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
+      <summary class="settings-section-header tool-card-summary">
         <i class="fa-solid fa-right-left" aria-hidden="true"></i> Transform
-        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
       </summary>
       <div class="settings-section-body tool-card-body" id="toolCardBody_transform">
         <textarea id="transformInput" class="snippet-content-input" style="min-height:70px;" placeholder="Input text…" aria-label="Transform input"></textarea>
@@ -2501,9 +2535,9 @@
 
     <!-- Regex tester (matches live as you type) -->
     <details class="settings-section" id="toolCard_regex" open>
-      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
+      <summary class="settings-section-header tool-card-summary">
         <i class="fa-solid fa-asterisk" aria-hidden="true"></i> Regex Tester
-        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
       </summary>
       <div class="settings-section-body tool-card-body" id="toolCardBody_regex">
         <div class="settings-row-inline">
@@ -2515,16 +2549,17 @@
           <input id="regexFlagsInput" class="settings-input settings-input-mono" style="max-width:70px;" value="g" aria-label="Regex flags">
         </div>
         <textarea id="regexTextInput" class="snippet-content-input" style="min-height:70px;" placeholder="Test text…" aria-label="Regex test text"></textarea>
-        <div id="regexResults" class="settings-shortcuts-list" aria-live="polite"></div>
+        <div id="regexStatus" role="status" aria-live="polite"></div>
+        <div id="regexResults" class="settings-shortcuts-list"></div>
         <div class="tool-card-grip" id="toolGrip_regex" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
     </details>
 
     <!-- URL unfurl / extraction -->
     <details class="settings-section" id="toolCard_unfurl" open>
-      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
+      <summary class="settings-section-header tool-card-summary">
         <i class="fa-solid fa-link" aria-hidden="true"></i> URL Unfurl
-        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
       </summary>
       <div class="settings-section-body tool-card-body" id="toolCardBody_unfurl">
         <textarea id="urlUnfurlInput" class="snippet-content-input" style="min-height:60px;" placeholder="https://example.com/path?q=encoded%20value#frag" aria-label="URL to unfurl"></textarea>
@@ -2802,9 +2837,9 @@
 
     <!-- 7. Keyboard Shortcuts (reference) -->
     <details class="settings-section" style="margin-bottom:10px;">
-      <summary class="settings-section-header" style="cursor:pointer; list-style:none; user-select:none;">
+      <summary class="settings-section-header tool-card-summary">
         <i class="fa-solid fa-keyboard" aria-hidden="true"></i> Keyboard Shortcuts
-        <i class="fa-solid fa-chevron-down" aria-hidden="true" style="margin-left:auto; font-size:11px; color:var(--text-secondary);"></i>
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
       </summary>
       <div class="settings-section-body">
         <div class="settings-shortcuts-list">

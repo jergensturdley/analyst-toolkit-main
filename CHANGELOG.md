@@ -8,6 +8,14 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
 - Scamalytics IP enrichment (v3 API, free tier): fraud score, risk class, VPN/datacenter/blacklist flags, and bundled MaxMind geo/ASN on a source card; username + API key + node (US/EU) under Settings, plus a built-in Scamalytics OSINT link for IPs
 
+## [0.6.0] - 2026-10-07
+
+### Fixed
+
+- Tools tab hardening after a four-model adversarial review: card collapse/resize state no longer writes back to storage on every popup open, persisted card heights are clamped on load, and the settings writer was consolidated (with `chrome.runtime.lastError` now handled)
+- Live regex tester caps results at 500 matches with a truncation note, shows a neutral state instead of per-character matches for an empty pattern, and announces a summary line to screen readers instead of re-reading the whole match list
+- Resize grips are keyboard operable (arrow keys) and survive touch drags; fixed-height card bodies scroll instead of clipping content; card chevrons now rotate when closed
+
 ## [0.5.8] - 2026-10-03
 
 ### Added

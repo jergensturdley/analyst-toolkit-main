@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SOC Analyst Toolkit",
-  "version": "0.5.8",
+  "version": "0.6.0",
   "description": "A comprehensive toolkit for SOC analysts with IOC analysis, OSINT integration, and snippet management",
 
   "permissions": [

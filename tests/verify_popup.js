@@ -923,6 +923,12 @@ async function main() {
     assert.ok(/<details class="settings-section" id="toolCard_filehash"/.test(html),
       'cards must use the settings-section details idiom');
     assert.ok(/tool-card-grip/.test(html), 'grip class missing');
+    assert.ok(/touch-action:\s*none/.test(html), 'grip must claim vertical drags from touch scrolling');
+    assert.ok(/summary class="settings-section-header tool-card-summary"/.test(html),
+      'summaries must use the shared class, not inline styles');
+    assert.ok(/id="regexStatus" role="status"/.test(html), 'live status line missing');
+    assert.ok(!/id="regexResults"[^>]*aria-live/.test(html),
+      'the match list must stay out of the live region');
   });
 
   await test('tool card toggle persists its open state', async () => {
@@ -970,6 +976,34 @@ async function main() {
     storage.remove(['socSettings']);
   });
 
+  await test('persisted height is clamped at the load boundary', async () => {
+    const body = document.getElementById('toolCardBody_regex');
+    storage.set({ socSettings: { toolCards: { regex: { open: true, height: 1 } } } });
+    await toolkit.loadSettings();
+    assert.strictEqual(body.style.height, '120px', 'stored 1px must clamp to the 120px floor');
+    assert.strictEqual(toolkit.toolCards.regex.height, 120, 'in-memory state must be clamped too');
+    storage.remove(['socSettings']);
+  });
+
+  await test('grip is keyboard operable: arrows resize and persist', async () => {
+    const body = document.getElementById('toolCardBody_unfurl');
+    const grip = document.getElementById('toolGrip_unfurl');
+    assert.strictEqual(grip.tabIndex, 0, 'grip must be focusable');
+    const keydown = grip._listeners.keydown;
+    assert.ok(keydown, 'keydown handler not bound');
+    body.style.height = '200px';
+    keydown({ key: 'ArrowUp', preventDefault() {} });
+    assert.strictEqual(body.style.height, '220px', 'ArrowUp grows by 20px');
+    keydown({ key: 'ArrowDown', preventDefault() {} });
+    keydown({ key: 'ArrowDown', preventDefault() {} });
+    assert.strictEqual(body.style.height, '180px', 'ArrowDown shrinks by 20px');
+    keydown({ key: 'ArrowLeft', preventDefault() {} });
+    assert.strictEqual(body.style.height, '180px', 'other keys are ignored');
+    const stored = await new Promise((resolve) => storage.get(['socSettings'], resolve));
+    assert.strictEqual(stored.socSettings.toolCards.unfurl.height, 180, 'keyboard resize must persist');
+    storage.remove(['socSettings']);
+  });
+
   console.log('\n--- live regex ---');
 
   await test('regex matching runs live on input, no Run button', async () => {
@@ -986,7 +1020,8 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 250));
     const out = document.getElementById('regexResults').innerHTML;
     assert.ok(out.includes('foo@bar.com') && out.includes('baz@qux.com'), out);
-    assert.ok(out.includes('<span>2</span>'), 'match count missing: ' + out);
+    assert.strictEqual(document.getElementById('regexStatus').textContent, '2 matches',
+      'count must be announced on the status line, not the list');
   });
 
   await test('invalid pattern renders the live error row after the debounce', async () => {
@@ -1008,6 +1043,31 @@ async function main() {
     assert.ok(document.getElementById('regexPatternInput').value.length > 10, 'preset pattern must load');
     assert.ok(document.getElementById('regexResults').innerHTML.includes('1.2.3.4'),
       'preset change must re-run the match');
+  });
+
+  await test('empty pattern renders the neutral state instead of per-index matches', async () => {
+    const pattern = document.getElementById('regexPatternInput');
+    document.getElementById('regexTextInput').value = 'abc';
+    pattern.value = '';
+    pattern._listeners.input();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const out = document.getElementById('regexResults').innerHTML;
+    assert.strictEqual(out, '', 'no match rows may render for an empty pattern');
+    assert.strictEqual(document.getElementById('regexStatus').textContent,
+      'enter a pattern to test', 'neutral state must be announced');
+  });
+
+  await test('match collection caps at 500 and says so', async () => {
+    const pattern = document.getElementById('regexPatternInput');
+    document.getElementById('regexTextInput').value = 'a'.repeat(700);
+    pattern.value = 'a';
+    pattern._listeners.input();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.strictEqual(document.getElementById('regexStatus').textContent,
+      '500 matches (showing first 500)', 'truncation must be announced');
+    const out = document.getElementById('regexResults').innerHTML;
+    assert.ok((out.match(/settings-shortcut-row/g) || []).length <= 500,
+      'row count must stay bounded');
   });
 
   console.log('\nTest Summary:');
