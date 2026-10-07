@@ -970,6 +970,15 @@ async function main() {
     storage.remove(['socSettings']);
   });
 
+  await test('persisted height is clamped at the load boundary', async () => {
+    const body = document.getElementById('toolCardBody_regex');
+    storage.set({ socSettings: { toolCards: { regex: { open: true, height: 1 } } } });
+    await toolkit.loadSettings();
+    assert.strictEqual(body.style.height, '120px', 'stored 1px must clamp to the 120px floor');
+    assert.strictEqual(toolkit.toolCards.regex.height, 120, 'in-memory state must be clamped too');
+    storage.remove(['socSettings']);
+  });
+
   console.log('\n--- live regex ---');
 
   await test('regex matching runs live on input, no Run button', async () => {
@@ -1008,6 +1017,29 @@ async function main() {
     assert.ok(document.getElementById('regexPatternInput').value.length > 10, 'preset pattern must load');
     assert.ok(document.getElementById('regexResults').innerHTML.includes('1.2.3.4'),
       'preset change must re-run the match');
+  });
+
+  await test('empty pattern renders the neutral state instead of per-index matches', async () => {
+    const pattern = document.getElementById('regexPatternInput');
+    document.getElementById('regexTextInput').value = 'abc';
+    pattern.value = '';
+    pattern._listeners.input();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const out = document.getElementById('regexResults').innerHTML;
+    assert.ok(out.includes('enter a pattern'), 'neutral row must render: ' + out);
+    assert.ok(!out.includes('#1'), 'no match rows may render for an empty pattern');
+  });
+
+  await test('match collection caps at 500 and says so', async () => {
+    const pattern = document.getElementById('regexPatternInput');
+    document.getElementById('regexTextInput').value = 'a'.repeat(700);
+    pattern.value = 'a';
+    pattern._listeners.input();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const out = document.getElementById('regexResults').innerHTML;
+    assert.ok(out.includes('showing first 500'), 'truncation note must render: ' + out.slice(0, 200));
+    assert.ok((out.match(/settings-shortcut-row/g) || []).length <= 502,
+      'row count must stay bounded');
   });
 
   console.log('\nTest Summary:');

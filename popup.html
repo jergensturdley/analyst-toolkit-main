@@ -1536,9 +1536,12 @@
     .ioc-graph-header button.collapsed #graphCollapseChevron,
     .ioc-list-header button.collapsed #expandAllLinksChevron { transform: rotate(-90deg); }
 
-    /* Tool cards (Tools tab): resizable bodies with a bottom drag grip */
+    /* Tool cards (Tools tab): resizable bodies with a bottom drag grip.
+       overflow-y keeps fixed-height bodies from spilling or clipping
+       content taller than the persisted height. */
     .tool-card-body {
       position: relative;
+      overflow-y: auto;
     }
 
     /* Growing the card grows the working area */
@@ -1547,10 +1550,11 @@
     }
 
     .tool-card-grip {
-      position: absolute;
-      left: 0;
-      right: 0;
+      /* Sticky (not absolute) so the grip stays reachable when the body
+         scrolls; it rides the bottom of the visible body during overflow. */
+      position: sticky;
       bottom: 0;
+      flex: none;
       height: 7px;
       cursor: ns-resize;
       background: var(--border-secondary);
