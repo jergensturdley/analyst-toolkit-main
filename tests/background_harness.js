@@ -122,6 +122,7 @@ async function loadBackgroundToolkit(root) {
     fetchVirusTotalUrl: typeof fetchVirusTotalUrl === 'function' ? fetchVirusTotalUrl : null,
     fetchVirusTotalIp: typeof fetchVirusTotalIp === 'function' ? fetchVirusTotalIp : null,
     fetchURLhaus: typeof fetchURLhaus === 'function' ? fetchURLhaus : null,
+    fetchScamalytics: typeof fetchScamalytics === 'function' ? fetchScamalytics : null,
     agentCacheKeysToPrune: typeof agentCacheKeysToPrune === 'function' ? agentCacheKeysToPrune : null,
     setCachedAgentResult: typeof setCachedAgentResult === 'function' ? setCachedAgentResult : null,
     configureSidePanel: typeof configureSidePanel === 'function' ? configureSidePanel : null,

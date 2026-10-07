@@ -1153,6 +1153,7 @@ Each agent follows a consistent implementation pattern. Use these specifications
 |--------|---------------|---------|------------|------|----------|
 | **ipinfo.io** | Geo, ASN, ISP, org | Optional (free tier) | 50k/month | Free | Primary |
 | **IPAddress.to** | Geo, ASN, rDNS, company, VPN/proxy/Tor flags, fraud score | No | Fair use (500/day in extension) | Free | Primary |
+| **Scamalytics** | Fraud score (0-100), risk class, VPN/datacenter flags, blacklist status, MaxMind geo/ASN piggyback | Yes (username + key) | 5,000/month free tier | Free | Medium |
 | **AbuseIPDB** | Abuse reports, confidence score | Yes | 1k/day | Free | High |
 | **VirusTotal** | Passive DNS, ASN, prefix, registry | Yes | 4/min | Free | Medium |
 | **Shodan** | Open ports, banners, services | Yes | 100/month | $49/mo | Optional |
@@ -1175,6 +1176,12 @@ Each agent follows a consistent implementation pattern. Use these specifications
     - Header: `User-Agent: SOC-Analyst-Toolkit-Extension` (provider request)
     - Parse: location, asn, company, is_vpn/is_proxy/is_tor/is_hosting, score/risk
     - Note: keyless + CORS-open; fraud score is fallback risk only when AbuseIPDB is absent
+  - [x] Implement `fetchScamalytics()` for IP fraud scoring (v3 API)
+    - Endpoint: `https://{api11|api12}.scamalytics.com/v3/{username}?key={key}&ip={ip}` — auth is username-in-path + key-as-query-param (header auth not supported by the API)
+    - Settings: `scamalyticsUsername` + `scamalyticsApiKey` + `scamalyticsNode` (api11 US default / api12 EU — account is tied to the node chosen at signup)
+    - Parse: `scamalytics_score` (0-100), `scamalytics_risk`, `scamalytics_proxy.*` flags, `is_blacklisted_external`, `credits.remaining`, bundled `maxmind_geolite2` geo/ASN
+    - Errors: HTTP 401 → `API_KEY_INVALID`; app-level `status:"error"` on HTTP 200 (e.g. "Excess limit: credits exhausted") → `RATE_LIMIT_EXCEEDED`
+    - Note: free tier 5,000 credits/month (rate-limited as a 30-day window); score is the last fallback in the summary chain (AbuseIPDB → IPAddress.to → Scamalytics); docs: https://docs.scamalytics.com/ip-fraud-risk-api/v3/
   - [ ] Implement `fetchAbuseIPDB()` for AbuseIPDB
     - Endpoint: `https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90`
     - Header: `Key: {apiKey}`, `Accept: application/json`
@@ -1542,6 +1549,7 @@ Each agent follows a consistent implementation pattern. Use these specifications
 - **AbuseIPDB**: https://www.abuseipdb.com/api
 - **ipinfo.io**: https://ipinfo.io/developers
 - **IPAddress.to**: https://ipaddress.to/api/docs/
+- **Scamalytics**: https://docs.scamalytics.com/ip-fraud-risk-api/v3/
 - **Shodan**: https://developer.shodan.io/api
 - **Censys**: https://search.censys.io/api
 

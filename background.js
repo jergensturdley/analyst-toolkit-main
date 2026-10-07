@@ -51,7 +51,9 @@ const RATE_LIMITS = {
   urlscan: { requests: 100, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
   urlhaus: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
   phishtank: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
-  ipaddressto: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 }
+  ipaddressto: { requests: 500, window: 24 * 60 * 60 * 1000, backoff: 60 * 1000 },
+  // Free tier is 5,000 credits per calendar month; approximated as a 30-day window
+  scamalytics: { requests: 5000, window: 30 * 24 * 60 * 60 * 1000, backoff: 60 * 1000 }
 };
 
 const MAX_RATE_LIMIT_PROVIDERS = 1000;
@@ -341,7 +343,7 @@ async function getEnabledProviders() {
 async function runIpAgent(ip, options = {}) {
   const [keys, providerPrefs] = await Promise.all([
     new Promise((resolve) =>
-      chrome.storage.local.get(['ipinfoApiKey', 'abuseipdbApiKey', 'virustotalApiKey'], resolve)
+      chrome.storage.local.get(['ipinfoApiKey', 'abuseipdbApiKey', 'virustotalApiKey', 'scamalyticsApiKey', 'scamalyticsUsername', 'scamalyticsNode'], resolve)
     ),
     getEnabledProviders()
   ]);
@@ -352,7 +354,8 @@ async function runIpAgent(ip, options = {}) {
     isEnabled('ipinfo')    ? fetchIpInfo(ip, keys.ipinfoApiKey)              : Promise.resolve(null),
     isEnabled('abuseipdb') ? fetchAbuseIPDB(ip, keys.abuseipdbApiKey)        : Promise.resolve(null),
     isEnabled('virustotal')? fetchVirusTotalIp(ip, keys.virustotalApiKey)    : Promise.resolve(null),
-    isEnabled('ipaddressto') ? fetchIpAddressTo(ip)                            : Promise.resolve(null)
+    isEnabled('ipaddressto') ? fetchIpAddressTo(ip)                            : Promise.resolve(null),
+    isEnabled('scamalytics') ? fetchScamalytics(ip, keys.scamalyticsUsername, keys.scamalyticsApiKey, keys.scamalyticsNode) : Promise.resolve(null)
   ];
 
   const settledResults = await Promise.allSettled(tasks);
@@ -426,6 +429,20 @@ function buildIpSummary(sources) {
       summary.riskScore = fs;
       summary.confidence = Math.min(1, fs / 100);
       summary.verdict = fs >= 75 ? 'malicious' : fs >= 40 ? 'suspicious' : 'clean';
+    }
+  }
+
+  const scam = sources.find((s) => s.provider === 'scamalytics' && s.status === 'success');
+  if (scam?.data) {
+    if (scam.data.is_vpn === 'true') summary.tags.push('vpn');
+    if (scam.data.is_datacenter === 'true') summary.tags.push('datacenter');
+    if (scam.data.blacklisted === 'true') summary.tags.push('blacklisted');
+    // Fallback risk when neither AbuseIPDB nor IPAddress.to contributed a score
+    if (!abuse && !(ipto?.data?.fraud_score !== undefined) && scam.data.score !== undefined) {
+      const sc = Number(scam.data.score);
+      summary.riskScore = sc;
+      summary.confidence = Math.min(1, sc / 100);
+      summary.verdict = sc >= 75 ? 'malicious' : sc >= 40 ? 'suspicious' : 'clean';
     }
   }
 
@@ -723,6 +740,101 @@ async function fetchIpAddressTo(ip) {
     };
   } catch (err) {
     return { provider: 'ipaddressto', displayName: 'IPAddress.to', status: 'error', errorCode: 'NETWORK_ERROR', errorMessage: err.message };
+  }
+}
+
+// Flatten the Scamalytics v3 response into the flat, copy-friendly data shape
+// used by enrichment source cards. Proxy booleans are stringified to match the
+// ipaddressto card/summary convention ('true'/'false').
+function normalizeScamalytics(ip, json) {
+  const s = (json && json.scamalytics) || {};
+  const proxy = s.scamalytics_proxy || {};
+  const mm = ((json && json.external_datasources) || {}).maxmind_geolite2 || {};
+  const data = {};
+  if (s.scamalytics_score !== undefined) data.score = s.scamalytics_score;
+  if (s.scamalytics_risk) data.risk = s.scamalytics_risk;
+  if (s.scamalytics_isp_score !== undefined) data.isp_score = s.scamalytics_isp_score;
+  if (s.scamalytics_isp_risk) data.isp_risk = s.scamalytics_isp_risk;
+  if (typeof proxy.is_datacenter === 'boolean') data.is_datacenter = String(proxy.is_datacenter);
+  if (typeof proxy.is_vpn === 'boolean') data.is_vpn = String(proxy.is_vpn);
+  if (typeof proxy.is_apple_icloud_private_relay === 'boolean') data.is_apple_relay = String(proxy.is_apple_icloud_private_relay);
+  if (typeof proxy.is_amazon_aws === 'boolean') data.is_aws = String(proxy.is_amazon_aws);
+  if (typeof proxy.is_google === 'boolean') data.is_google = String(proxy.is_google);
+  if (typeof s.is_blacklisted_external === 'boolean') data.blacklisted = String(s.is_blacklisted_external);
+  // Free tier bundles MaxMind GeoLite2 — surface the geo/ASN fields on the card
+  if (mm.ip_country_name) data.country = mm.ip_country_name;
+  if (mm.ip_state_name) data.state = mm.ip_state_name;
+  if (mm.ip_city) data.city = mm.ip_city;
+  if (mm.asn) data.asn = `AS${mm.asn}`;
+  if (mm.as_name) data.as_org = mm.as_name;
+  if (s.credits && s.credits.remaining !== undefined) data.credits_remaining = s.credits.remaining;
+
+  const nodes = [];
+  const edges = [];
+  const repId = `scam_${ip.replace(/[.:]/g, '_')}`;
+  nodes.push({
+    id: repId,
+    label: `Scamalytics ${s.scamalytics_score ?? 'N/A'}/100${s.scamalytics_risk ? ` (${s.scamalytics_risk})` : ''}`,
+    type: 'reputation',
+    properties: {
+      score: s.scamalytics_score,
+      risk: s.scamalytics_risk,
+      is_vpn: !!proxy.is_vpn,
+      is_datacenter: !!proxy.is_datacenter,
+      blacklisted: !!s.is_blacklisted_external
+    }
+  });
+  edges.push({ id: `edge_${ip}_scamalytics`, from: ip, to: repId, label: 'reported-by', properties: { source: 'scamalytics' } });
+  return { data, nodes, edges };
+}
+
+async function fetchScamalytics(ip, username, apiKey, node) {
+  if (!apiKey || !username) {
+    return { provider: 'scamalytics', displayName: 'Scamalytics', status: 'error', errorCode: 'API_KEY_MISSING', errorMessage: 'Scamalytics username and API key not set' };
+  }
+  // Accounts are tied to the node chosen at signup; default to the US node
+  const host = node === 'api12' ? 'api12' : 'api11';
+  try {
+    if (!rateLimiter.canMakeRequest('scamalytics')) {
+      return {
+        provider: 'scamalytics',
+        displayName: 'Scamalytics',
+        status: 'error',
+        errorCode: 'RATE_LIMIT_EXCEEDED',
+        errorMessage: `Try again in ${Math.ceil(rateLimiter.timeUntilAvailable('scamalytics') / 1000)}s`
+      };
+    }
+    // The v3 API only accepts auth via URL path (username) + query param (key),
+    // so unlike other providers the key cannot move into a header.
+    const url = `https://${host}.scamalytics.com/v3/${encodeURIComponent(username)}?key=${encodeURIComponent(apiKey)}&ip=${encodeURIComponent(ip)}`;
+    const resp = await fetchWithBackoff(url, { headers: { Accept: 'application/json' } });
+    rateLimiter.recordRequest('scamalytics');
+    if (!resp.ok) {
+      return { provider: 'scamalytics', displayName: 'Scamalytics', status: 'error', errorCode: httpErrorCode(resp.status), errorMessage: `HTTP ${resp.status}` };
+    }
+    const json = await resp.json();
+    // App-level errors can ride on HTTP 200 (e.g. "Excess limit: credits exhausted")
+    if (!json || !json.scamalytics || json.scamalytics.status === 'error') {
+      const msg = (json && json.scamalytics && json.scamalytics.error) || 'Response missing scamalytics object';
+      const code = /excess|credit/i.test(msg) ? 'RATE_LIMIT_EXCEEDED' : /unauthorized|invalid api key/i.test(msg) ? 'API_KEY_INVALID' : 'UNKNOWN_ERROR';
+      return { provider: 'scamalytics', displayName: 'Scamalytics', status: 'error', errorCode: code, errorMessage: msg };
+    }
+    const { data, nodes, edges } = normalizeScamalytics(ip, json);
+    return {
+      provider: 'scamalytics',
+      displayName: 'Scamalytics',
+      status: 'success',
+      cached: false,
+      data,
+      nodes,
+      edges,
+      // Web report URL echoed by the API; the enrichment panel's "Source" button
+      // renders this (https-only guarded).
+      apiUrl: json.scamalytics.scamalytics_url || `https://scamalytics.com/ip/${encodeURIComponent(ip)}`,
+      metadata: { ttlSeconds: 24 * 60 * 60, fetchedAt: Date.now() }
+    };
+  } catch (err) {
+    return { provider: 'scamalytics', displayName: 'Scamalytics', status: 'error', errorCode: err.status ? httpErrorCode(err.status) : 'NETWORK_ERROR', errorMessage: err.message };
   }
 }
 

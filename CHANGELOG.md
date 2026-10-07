@@ -2,6 +2,12 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Scamalytics IP enrichment (v3 API, free tier): fraud score, risk class, VPN/datacenter/blacklist flags, and bundled MaxMind geo/ASN on a source card; username + API key + node (US/EU) under Settings, plus a built-in Scamalytics OSINT link for IPs
+
 ## [0.6.0] - 2026-10-07
 
 ### Fixed

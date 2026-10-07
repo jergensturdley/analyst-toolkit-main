@@ -159,6 +159,105 @@ async function test(name, fn) {
     assert.ok(/offline/.test(res.errorMessage || ''), 'message includes query_status: ' + res.errorMessage);
   });
 
+  console.log('\n--- Scamalytics ---');
+
+  const scamResponse = (score, risk) => jsonResponse({
+    scamalytics: {
+      status: 'ok',
+      mode: 'live',
+      ip: '8.8.8.8',
+      scamalytics_score: score,
+      scamalytics_risk: risk,
+      scamalytics_url: 'https://scamalytics.com/ip/8.8.8.8',
+      scamalytics_isp_score: 0,
+      scamalytics_isp_risk: 'low',
+      scamalytics_proxy: { is_datacenter: true, is_vpn: false, is_apple_icloud_private_relay: false, is_amazon_aws: false, is_google: true },
+      is_blacklisted_external: false,
+      credits: { used: 10, remaining: 4990 }
+    },
+    external_datasources: {
+      maxmind_geolite2: { asn: '15169', as_name: 'Google LLC', ip_country_code: 'US', ip_country_name: 'United States', ip_state_name: 'Iowa', ip_city: 'Council Bluffs' }
+    }
+  });
+
+  await test('fetchScamalytics: success flattens score/flags and emits a reputation node', async () => {
+    bg.resetState();
+    let requested = null;
+    bg.setFetchImpl((input) => { requested = String(input); return scamResponse(87, 'high'); });
+    const res = await fns.fetchScamalytics('8.8.8.8', 'myuser', 'secret-key', 'api12');
+    assert.strictEqual(res.status, 'success');
+    // Auth is username-in-path + key-as-query-param per the v3 API
+    assert.ok(requested.includes('https://api12.scamalytics.com/v3/myuser?'), 'username in path on chosen node: ' + requested);
+    assert.ok(requested.includes('key=secret-key') && requested.includes('ip=8.8.8.8'), 'key + ip as query params: ' + requested);
+    assert.strictEqual(res.data.score, 87);
+    assert.strictEqual(res.data.risk, 'high');
+    assert.strictEqual(res.data.is_datacenter, 'true');
+    assert.strictEqual(res.data.blacklisted, 'false');
+    assert.strictEqual(res.data.country, 'United States');
+    assert.strictEqual(res.data.asn, 'AS15169');
+    const repNode = res.nodes.find((n) => n.type === 'reputation');
+    assert.ok(repNode, 'reputation node expected');
+    assert.strictEqual(repNode.id, 'scam_8_8_8_8');
+    assert.ok(/Scamalytics 87\/100 \(high\)/.test(repNode.label), 'label carries score + risk: ' + repNode.label);
+    assert.ok(res.edges.some((e) => e.id === 'edge_8.8.8.8_scamalytics'), 'reported-by edge');
+    assert.strictEqual(res.apiUrl, 'https://scamalytics.com/ip/8.8.8.8');
+  });
+
+  await test('fetchScamalytics: missing credentials is API_KEY_MISSING with no fetch', async () => {
+    bg.resetState();
+    bg.setFetchImpl(() => { throw new Error('no fetch expected without credentials'); });
+    const res = await fns.fetchScamalytics('8.8.8.8', '', 'secret-key');
+    assert.strictEqual(res.status, 'error');
+    assert.strictEqual(res.errorCode, 'API_KEY_MISSING');
+    const res2 = await fns.fetchScamalytics('8.8.8.8', 'myuser', '');
+    assert.strictEqual(res2.errorCode, 'API_KEY_MISSING');
+    assert.strictEqual(bg.fetchCalls.length, 0);
+  });
+
+  await test('fetchScamalytics: HTTP 401 maps to API_KEY_INVALID', async () => {
+    bg.resetState();
+    bg.setFetchImpl(() => jsonResponse({ scamalytics: { status: 'error', error: 'Unauthorized: invalid API key' } }, { status: 401, statusText: 'Unauthorized' }));
+    const res = await fns.fetchScamalytics('8.8.8.8', 'myuser', 'bad-key');
+    assert.strictEqual(res.status, 'error');
+    assert.strictEqual(res.errorCode, 'API_KEY_INVALID');
+  });
+
+  await test('fetchScamalytics: credits-exhausted body on HTTP 200 maps to RATE_LIMIT_EXCEEDED', async () => {
+    bg.resetState();
+    bg.setFetchImpl(() => jsonResponse({
+      scamalytics: { status: 'error', error: 'Excess limit: credits exhausted', credits: { used: 5000, remaining: 0 } }
+    }));
+    const res = await fns.fetchScamalytics('8.8.8.8', 'myuser', 'secret-key');
+    assert.strictEqual(res.status, 'error');
+    assert.strictEqual(res.errorCode, 'RATE_LIMIT_EXCEEDED');
+  });
+
+  await test('fetchScamalytics: pre-exhausted budget returns RATE_LIMIT_EXCEEDED without a fetch', async () => {
+    bg.resetState();
+    bg.exhaustRateLimit('scamalytics', RATE_LIMITS.scamalytics.requests);
+    bg.setFetchImpl(() => { throw new Error('no fetch expected when rate-limited'); });
+    const res = await fns.fetchScamalytics('8.8.8.8', 'myuser', 'secret-key');
+    assert.strictEqual(res.status, 'error');
+    assert.strictEqual(res.errorCode, 'RATE_LIMIT_EXCEEDED');
+    assert.strictEqual(bg.fetchCalls.length, 0);
+  });
+
+  await test('runIpAgent: scamalytics score is the summary fallback when no other risk source answers', async () => {
+    bg.resetState();
+    storageData['scamalyticsUsername'] = 'myuser';
+    storageData['scamalyticsApiKey'] = 'secret-key';
+    // Every other IP provider is disabled; scamalytics alone answers
+    storageData['enrichmentProviders'] = { ipinfo: false, abuseipdb: false, virustotal: false, ipaddressto: false, scamalytics: true };
+    bg.setFetchImpl(() => scamResponse(90, 'very high'));
+    const res = await bg.dispatch({ action: 'agentEnrich', iocType: 'ip', ioc: '8.8.8.8' });
+    assert.ok(res && res.payload, 'agentEnrich response expected');
+    assert.strictEqual(res.payload.summary.riskScore, 90);
+    assert.strictEqual(res.payload.summary.verdict, 'malicious');
+    assert.ok(res.payload.summary.tags.includes('datacenter'), 'datacenter tag from proxy flag');
+    const scamSource = res.payload.sources.find((s) => s.provider === 'scamalytics');
+    assert.ok(scamSource && scamSource.status === 'success', 'scamalytics source present');
+  });
+
   console.log('\n--- agent cache eviction ---');
 
   await test('agentCacheKeysToPrune: returns exactly the oldest keys beyond the cap, ignores non-agent2_ keys', () => {
