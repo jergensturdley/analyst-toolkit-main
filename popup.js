@@ -4210,6 +4210,17 @@ class SOCToolkit {
     };
     grip.addEventListener('pointerup', endDrag);
     grip.addEventListener('pointercancel', endDrag);
+    // Keyboard path for the separator role: arrows resize by 20px steps.
+    grip.tabIndex = 0;
+    grip.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      const cur = parseInt(body.style.height, 10) || body.offsetHeight || 0;
+      const next = this.clampCardHeight(cur + (e.key === 'ArrowUp' ? 20 : -20));
+      body.style.height = next + 'px';
+      this.toolCards[id] = Object.assign({}, this.toolCards[id], { height: next });
+      this.saveSettings();
+    });
   }
 
   // Pure regex core: never throws — invalid patterns come back as { error }.
@@ -4257,20 +4268,27 @@ class SOCToolkit {
     const text = document.getElementById('regexTextInput')?.value ?? '';
     const out = document.getElementById('regexResults');
     if (!out) return;
+    // One-line SR announcement: the match list itself stays out of the
+    // live region so screen readers hear a summary, not the whole dump.
+    const status = document.getElementById('regexStatus');
+    const announce = (msg) => { if (status) status.textContent = msg; };
     const row = (label, value) => `<div class="settings-shortcut-row"><span>${this.escapeHtml(label)}</span><span>${this.escapeHtml(value)}</span></div>`;
     // Empty pattern matches at every index — render the neutral state
     // instead of one row per character position.
     if (!pattern.trim()) {
-      out.innerHTML = row('Pattern', 'enter a pattern to test');
+      out.innerHTML = '';
+      announce('enter a pattern to test');
       return;
     }
     const { matches, truncated, error } = this.runRegex(pattern, flags, text);
     if (error) {
       out.innerHTML = `<div class="settings-shortcut-row" style="color:var(--danger-color);"><span>Error</span><span>${this.escapeHtml(error)}</span></div>`;
+      announce(`Error: ${error}`);
       return;
     }
+    announce(`${matches.length} matches${truncated ? ' (showing first 500)' : ''}`);
     if (!matches.length) {
-      out.innerHTML = row('Matches', '0');
+      out.innerHTML = '';
       return;
     }
     const rows = matches.map((m, i) => {
@@ -4279,7 +4297,7 @@ class SOCToolkit {
         : '';
       return row(`#${i + 1} @ index ${m.index}`, m.text + groups);
     }).join('');
-    out.innerHTML = row('Matches', String(matches.length) + (truncated ? ' (showing first 500)' : '')) + rows;
+    out.innerHTML = rows;
   }
 
   // Pure URL core using the URL API; never throws.
