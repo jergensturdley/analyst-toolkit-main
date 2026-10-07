@@ -20,6 +20,8 @@
     "https://www.abuseipdb.com/*",
     "https://api.abuseipdb.com/*",
     "https://ipaddress.to/*",
+    "https://api11.scamalytics.com/*",
+    "https://api12.scamalytics.com/*",
     "https://ipinfo.io/*",
     "https://urlscan.io/*",
     "https://urlhaus-api.abuse.ch/*",

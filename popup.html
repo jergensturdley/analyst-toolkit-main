@@ -2637,11 +2637,25 @@
             <input id="abuseipdbApiKey" type="password" class="settings-input settings-input-mono" placeholder="AbuseIPDB key" maxlength="128" autocomplete="off" style="width:100%;" />
           </div>
           <div>
+            <label class="settings-label-block" for="scamalyticsUsername">Scamalytics Username</label>
+            <input id="scamalyticsUsername" type="text" class="settings-input settings-input-mono" placeholder="API username" maxlength="128" autocomplete="off" style="width:100%;" />
           </div>
           <div>
             <label class="settings-label-block" for="urlscanApiKey">urlscan.io API Key</label>
             <input id="urlscanApiKey" type="password" class="settings-input settings-input-mono" placeholder="urlscan.io key" maxlength="128" autocomplete="off" style="width:100%;" />
           </div>
+          <div>
+            <label class="settings-label-block" for="scamalyticsApiKey">Scamalytics API Key</label>
+            <input id="scamalyticsApiKey" type="password" class="settings-input settings-input-mono" placeholder="Scamalytics key" maxlength="128" autocomplete="off" style="width:100%;" />
+          </div>
+        </div>
+        <div class="settings-row-inline" style="margin-top:6px;">
+          <label class="settings-label" for="scamalyticsNode" style="min-width:auto;">Scamalytics API node</label>
+          <select id="scamalyticsNode" class="settings-select">
+            <option value="api11">api11 (US)</option>
+            <option value="api12">api12 (EU)</option>
+          </select>
+          <span class="settings-hint">Free tier: 5,000 lookups/month. The account is tied to the node picked at signup.</span>
         </div>
       </div>
     </div>
@@ -2658,6 +2672,7 @@
           <label><input type="checkbox" id="providerToggle_ipinfo" checked> ipinfo.io</label>
           <label><input type="checkbox" id="providerToggle_abuseipdb" checked> AbuseIPDB</label>
           <label><input type="checkbox" id="providerToggle_ipaddressto" checked> IPAddress.to</label>
+          <label><input type="checkbox" id="providerToggle_scamalytics" checked> Scamalytics</label>
           <label><input type="checkbox" id="providerToggle_urlscan" checked> urlscan.io</label>
           <label><input type="checkbox" id="providerToggle_malwarebazaar" checked> MalwareBazaar</label>
           <label><input type="checkbox" id="providerToggle_urlhaus" checked> URLhaus</label>

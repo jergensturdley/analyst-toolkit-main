@@ -987,7 +987,9 @@ class SOCToolkit {
     const ipEnrichmentApiInputs = [
       { id: 'ipinfoApiKey', storageKey: 'ipinfoApiKey', label: 'ipinfo token' },
       { id: 'abuseipdbApiKey', storageKey: 'abuseipdbApiKey', label: 'AbuseIPDB key' },
-      { id: 'urlscanApiKey', storageKey: 'urlscanApiKey', label: 'urlscan.io key' }
+      { id: 'urlscanApiKey', storageKey: 'urlscanApiKey', label: 'urlscan.io key' },
+      { id: 'scamalyticsUsername', storageKey: 'scamalyticsUsername', label: 'Scamalytics username' },
+      { id: 'scamalyticsApiKey', storageKey: 'scamalyticsApiKey', label: 'Scamalytics key' }
     ];
     ipEnrichmentApiInputs.forEach((entry) => {
       const input = document.getElementById(entry.id);
@@ -1001,6 +1003,10 @@ class SOCToolkit {
           });
         });
       }
+    });
+
+    el('scamalyticsNode')?.addEventListener('change', (e) => {
+      chrome.storage.local.set({ scamalyticsNode: e.target.value === 'api12' ? 'api12' : 'api11' });
     });
 
     // Clear PDNS / ASN cache button
@@ -1099,7 +1105,7 @@ class SOCToolkit {
       });
     });
 
-    const providerIds = ['ipinfo', 'abuseipdb', 'virustotal', 'ipaddressto', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
+    const providerIds = ['ipinfo', 'abuseipdb', 'virustotal', 'ipaddressto', 'scamalytics', 'malwarebazaar', 'crtsh', 'urlscan', 'urlhaus', 'phishtank'];
     chrome.storage.local.get(['enrichmentProviders'], (res) => {
       const saved = res.enrichmentProviders || {};
       providerIds.forEach((pid) => {
@@ -1855,7 +1861,7 @@ class SOCToolkit {
   async loadSettings() {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'urlscanApiKey'], (res) => {
+        chrome.storage.local.get(['socSettings', 'savedIOCInput', 'lastAnalysisResults', 'cyberchefUrl', 'virustotalApiKey', 'ipinfoApiKey', 'abuseipdbApiKey', 'urlscanApiKey', 'scamalyticsUsername', 'scamalyticsApiKey', 'scamalyticsNode'], (res) => {
           const defaults = { autoAnalyze: true, enableGraph: true, theme: 'arc', autoEnrich: false, graphCollapsed: false, linksExpanded: false };
           const s = res.socSettings || defaults;
           this.autoAnalyze = s.autoAnalyze ?? true;
@@ -1917,6 +1923,12 @@ class SOCToolkit {
           if (abuseInput && res.abuseipdbApiKey) abuseInput.value = res.abuseipdbApiKey;
           const urlscanInput = document.getElementById('urlscanApiKey');
           if (urlscanInput && res.urlscanApiKey) urlscanInput.value = res.urlscanApiKey;
+          const scamUsernameInput = document.getElementById('scamalyticsUsername');
+          if (scamUsernameInput && res.scamalyticsUsername) scamUsernameInput.value = res.scamalyticsUsername;
+          const scamKeyInput = document.getElementById('scamalyticsApiKey');
+          if (scamKeyInput && res.scamalyticsApiKey) scamKeyInput.value = res.scamalyticsApiKey;
+          const scamNodeSelect = document.getElementById('scamalyticsNode');
+          if (scamNodeSelect) scamNodeSelect.value = res.scamalyticsNode === 'api12' ? 'api12' : 'api11';
 
           // Restore saved IOC input
           if (res.savedIOCInput) {
@@ -2475,6 +2487,8 @@ class SOCToolkit {
       links.push({ name: 'IPAddress.to', url: `https://ipaddress.to/lookup/${enc}` });
       // Pulsedive for IPs
       links.push({ name: 'Pulsedive', url: `https://pulsedive.com/indicator/?ioc=${b64}` });
+      // Scamalytics public IP fraud report (web page, no API key needed)
+      links.push({ name: 'Scamalytics', url: `https://scamalytics.com/ip/${enc}` });
     }
     // Domains: Pulsedive as well
     if (category === 'domain') {
