@@ -10,7 +10,7 @@ This extension provides a suite of tools to accelerate the investigation of secu
 ## Features
 
 ### IOC Detection & Analysis
-- **Comprehensive IOC Extraction**: Automatically detects and extracts multiple IOC types:
+- **IOC Extraction**: Automatically detects and extracts:
   - IP addresses (IPv4 and IPv6)
   - Domains and URLs
   - Email addresses
@@ -19,12 +19,13 @@ This extension provides a suite of tools to accelerate the investigation of secu
   - MITRE ATT&CK technique IDs (T1234, T1234.567)
   - Cryptocurrency addresses (Bitcoin, Ethereum)
   - MAC addresses
+  - Browser extension IDs (Chrome Web Store / Edge Add-ons)
 - **IOC Statistics**: Real-time statistics dashboard showing counts by IOC type
 - **Batch Operations**: Deduplicate and sort IOCs with one click
 - **Defanging/Refanging**: Convert IOCs to safe formats for sharing
 
 ### OSINT Integration
-- **Comprehensive Threat Intelligence**: Quick lookup in 20+ OSINT platforms including:
+- **Threat Intelligence**: Quick lookup in 20+ OSINT platforms including:
   - VirusTotal, AlienVault OTX, AbuseIPDB, ipinfo.io, IPAddress.to
   - Shodan (for IPs)
   - URLhaus, urlscan.io (for URLs/domains)
@@ -32,7 +33,8 @@ This extension provides a suite of tools to accelerate the investigation of secu
   - MITRE ATT&CK, D3FEND (for techniques)
   - Blockchain explorers (for crypto addresses)
   - MAC vendor lookups
-- **Agent Enrichment**: Configurable IP enrichment (ipinfo.io, IPAddress.to, AbuseIPDB, VirusTotal) with caching and rate limits, triggered from the IOC graph right-click menu.
+  - Chrome Web Store and Edge Add-ons (for browser extension IDs)
+- **Agent Enrichment**: Configurable IP enrichment (ipinfo.io, IPAddress.to, AbuseIPDB, VirusTotal, Scamalytics) with caching and rate limits, triggered from the IOC graph right-click menu.
 - **Custom OSINT Sources**: Add your own internal tools and platforms
 - **Context Menu Integration**: Right-click any selected text for instant OSINT lookups
 
@@ -95,7 +97,7 @@ Temporary add-ons are removed when Firefox closes, so repeat step 3 after each r
 
 - **Manifest Version**: 3
 - **Permissions**: `storage`, `clipboardWrite`, `clipboardRead`, `contextMenus`, `notifications`, `activeTab`, `scripting`.
-- **Host Permissions**: Scoped to the OSINT and CyberChef domains the extension queries — see `manifest.json` for the full list.
+- **Host Permissions**: Scoped to the 11 API hosts the background service worker fetches for enrichment. Tab-opened lookups (VirusTotal pages, CyberChef, MITRE, and other browse sites) need no host permission — see `manifest.json`.
 - **Storage**: Uses local browser storage for all user data.
 
 ## Contributing
