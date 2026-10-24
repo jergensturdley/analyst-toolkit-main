@@ -228,6 +228,10 @@ class SOCToolkit {
       btc: /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g,
       eth: /\b0x[a-fA-F0-9]{40}\b/g,
       mac: /\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g,
+      // Chrome/Edge store extension IDs: exactly 32 chars, [a-p] only. The
+      // lookahead requires a g-p char inside the first 32 so all-a-f strings
+      // (valid MD5 shapes) never masquerade as extension IDs.
+      extensionId: /\b(?=[a-p]{0,31}[g-p])[a-p]{32}\b/g,
       email: /\b[\w.+-]+@([\w-]+\.)+[\w-]{2,}\b/gi,
       domain: /\b(?!https?:\/\/)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi,
       md5: /\b[a-f0-9]{32}\b/gi,
@@ -1327,7 +1331,7 @@ class SOCToolkit {
 
     // Build stats HTML
     const statItems = [];
-    const categoryOrder = ['ip', 'domain', 'url', 'email', 'hash', 'cve', 'mitre', 'crypto', 'mac'];
+    const categoryOrder = ['ip', 'domain', 'url', 'email', 'hash', 'cve', 'mitre', 'crypto', 'mac', 'extension'];
     const categoryLabels = {
       'ip': 'IPs',
       'domain': 'Domains',
@@ -1337,7 +1341,8 @@ class SOCToolkit {
       'cve': 'CVEs',
       'mitre': 'MITRE',
       'crypto': 'Crypto',
-      'mac': 'MACs'
+      'mac': 'MACs',
+      'extension': 'Extensions'
     };
 
     for (const cat of categoryOrder) {
@@ -1979,6 +1984,7 @@ class SOCToolkit {
     if (t.includes('mitre')) return 'mitre';
     if (t.includes('bitcoin') || t.includes('ethereum') || t.includes('crypto')) return 'crypto';
     if (t.includes('mac')) return 'mac';
+    if (t.includes('extension')) return 'extension';
     if (t.includes('email')) return 'email';
     return 'domain';
   }
@@ -2559,6 +2565,13 @@ class SOCToolkit {
       links.push({ name: 'MAC Address Lookup', url: `https://www.macvendorlookup.com/search/${enc}` });
     }
 
+    // Browser extension ID lookups (Chrome Web Store / Edge Add-ons).
+    // Opening a tab needs no host permission, so no manifest change.
+    if (category === 'extension') {
+      links.push({ name: 'Chrome Web Store', url: `https://chromewebstore.google.com/detail/${enc}` });
+      links.push({ name: 'Edge Add-ons', url: `https://microsoftedge.microsoft.com/addons/detail/${enc}` });
+    }
+
     // Add custom OSINT sources
     for (const source of this.customOsintSources) {
       if (source.types === 'all' || source.types === category) {
@@ -2712,6 +2725,7 @@ class SOCToolkit {
     this._extractSecurityIOCs(text, results);
     this._extractFinancialIOCs(text, results);
     this._extractHardwareIOCs(text, results);
+    this._extractBrowserIOCs(text, results);
     this._extractHashes(text, results);
     this._extractDomains(text, results);
 
@@ -2741,6 +2755,17 @@ class SOCToolkit {
   _extractUrls(text, results) {
     (text.match(this.patterns.url) || []).forEach(v => {
       this._addResult(results, 'URL', v, 'url');
+      // Chrome/Edge store detail URLs carry the extension ID as the last path
+      // segment; surface it as its own pivot row (_dedupeResults collapses it
+      // with a standalone occurrence of the same ID).
+      const host = (v.match(/^https?:\/\/([^/?#]+)/) || [])[1] || '';
+      if (/(^|\.)chromewebstore\.google\.com$/i.test(host) ||
+          /(^|\.)microsoftedge\.microsoft\.com$/i.test(host)) {
+        const seg = v.split(/[?#]/)[0].split('/').filter(Boolean).pop() || '';
+        if (/^[a-p]{32}$/.test(seg)) {
+          this._addResult(results, 'Extension ID', seg, 'extension');
+        }
+      }
     });
   }
 
@@ -2790,6 +2815,12 @@ class SOCToolkit {
   _extractHardwareIOCs(text, results) {
     (text.match(this.patterns.mac) || []).forEach(v => {
       this._addResult(results, 'MAC', v.toUpperCase(), 'mac');
+    });
+  }
+
+  _extractBrowserIOCs(text, results) {
+    (text.match(this.patterns.extensionId) || []).forEach(v => {
+      this._addResult(results, 'Extension ID', v, 'extension');
     });
   }
 

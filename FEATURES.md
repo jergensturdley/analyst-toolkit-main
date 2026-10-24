@@ -30,6 +30,9 @@
 #### Hardware Identifiers (NEW in v0.4)
 - **MAC Addresses**: Supports both colon and hyphen separators
 
+#### Browser Identifiers (NEW)
+- **Extension IDs**: 32-character Chrome Web Store / Edge Add-ons IDs, detected standalone in alert text or inside store detail URLs
+
 ## 🌐 OSINT Integration
 
 ### Threat Intelligence Platforms
@@ -72,7 +75,12 @@
 - **macvendors.com**: MAC address vendor lookup
 - **macvendorlookup.com**: MAC address information
 
+### Browser Stores
+- **chromewebstore.google.com**: Chrome extension listing lookup
+- **microsoftedge.microsoft.com**: Edge add-on listing lookup
+
 ### Custom Sources
+
 - Add your own internal tools and platforms
 - Use {{IOC}} placeholder for dynamic URLs
 - Filter by IOC type or apply to all types

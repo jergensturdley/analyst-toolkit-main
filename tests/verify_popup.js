@@ -93,6 +93,37 @@ async function main() {
     assert.strictEqual(count, 1, `expected 1, got ${count}: ` + JSON.stringify(iocs));
   });
 
+  await test('Chrome extension ID extracted with extension category', () => {
+    const iocs = toolkit.extractIOCs('Malicious extension nkbihfbeogaeaoehlefnkodbefgpgknn');
+    const ext = iocs.find(i => i.type === 'Extension ID');
+    assert.ok(ext, 'extension ID not detected: ' + JSON.stringify(iocs));
+    assert.strictEqual(ext.value, 'nkbihfbeogaeaoehlefnkodbefgpgknn');
+    assert.strictEqual(ext.category, 'extension');
+  });
+
+  await test('extension ID deduped when store URL and standalone ID overlap', () => {
+    const url = 'https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm';
+    const iocs = toolkit.extractIOCs(`Review ${url} (id cjpalhdlnbpafiamejdnhcphjbkeiagm)`);
+    const ext = iocs.filter(i => i.type === 'Extension ID');
+    assert.strictEqual(ext.length, 1, `expected exactly 1, got ${ext.length}`);
+    assert.strictEqual(ext[0].value, 'cjpalhdlnbpafiamejdnhcphjbkeiagm');
+  });
+
+  await test('extension ID OSINT links open Chrome Web Store and Edge Add-ons', () => {
+    const links = toolkit.generateOSINTLinks('cjpalhdlnbpafiamejdnhcphjbkeiagm', 'extension');
+    const cws = links.find(l => l.name === 'Chrome Web Store');
+    assert.ok(cws, 'Chrome Web Store link missing: ' + JSON.stringify(links));
+    assert.strictEqual(cws.url, 'https://chromewebstore.google.com/detail/cjpalhdlnbpafiamejdnhcphjbkeiagm');
+    const edge = links.find(l => l.name === 'Edge Add-ons');
+    assert.ok(edge, 'Edge Add-ons link missing: ' + JSON.stringify(links));
+    assert.strictEqual(edge.url, 'https://microsoftedge.microsoft.com/addons/detail/cjpalhdlnbpafiamejdnhcphjbkeiagm');
+  });
+
+  await test('inferCategoryFromType maps Extension ID to extension', () => {
+    assert.strictEqual(toolkit.inferCategoryFromType('Extension ID'), 'extension');
+  });
+
+
   await test('domain containment preserved: no standalone Domain row for URL host', () => {
     const iocs = toolkit.extractIOCs('Visit https://example.com/path');
     const domain = iocs.find(i => i.type === 'Domain' && i.value === 'example.com');

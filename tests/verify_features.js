@@ -36,6 +36,7 @@ class SOCToolkitMock {
       btc: /\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g,
       eth: /\b0x[a-fA-F0-9]{40}\b/g,
       mac: /\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g,
+      extensionId: /\b(?=[a-p]{0,31}[g-p])[a-p]{32}\b/g,
       email: /\b[\w.+-]+@([\w-]+\.)+[\w-]{2,}\b/gi,
       domain: /\b(?!https?:\/\/)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi,
       md5: /\b[a-f0-9]{32}\b/gi,
@@ -67,6 +68,7 @@ class SOCToolkitMock {
     this._extractSecurityIOCs(text, results);
     this._extractFinancialIOCs(text, results);
     this._extractHardwareIOCs(text, results);
+    this._extractBrowserIOCs(text, results);
     this._extractHashes(text, results);
     this._extractDomains(text, results);
 
@@ -92,6 +94,14 @@ class SOCToolkitMock {
   _extractUrls(text, results) {
     (text.match(this.patterns.url) || []).forEach(v => {
       this._addResult(results, 'URL', v, 'url');
+      const host = (v.match(/^https?:\/\/([^/?#]+)/) || [])[1] || '';
+      if (/(^|\.)chromewebstore\.google\.com$/i.test(host) ||
+          /(^|\.)microsoftedge\.microsoft\.com$/i.test(host)) {
+        const seg = v.split(/[?#]/)[0].split('/').filter(Boolean).pop() || '';
+        if (/^[a-p]{32}$/.test(seg)) {
+          this._addResult(results, 'Extension ID', seg, 'extension');
+        }
+      }
     });
   }
 
@@ -132,6 +142,12 @@ class SOCToolkitMock {
   _extractHardwareIOCs(text, results) {
     (text.match(this.patterns.mac) || []).forEach(v => {
       this._addResult(results, 'MAC', v.toUpperCase(), 'mac');
+    });
+  }
+
+  _extractBrowserIOCs(text, results) {
+    (text.match(this.patterns.extensionId) || []).forEach(v => {
+      this._addResult(results, 'Extension ID', v, 'extension');
     });
   }
 
@@ -670,6 +686,61 @@ test('MAC is normalized to uppercase', () => {
   const mac = iocs.find(i => i.type === 'MAC');
   assert.ok(mac, 'MAC not detected');
   assert.ok(mac.value === mac.value.toUpperCase(), 'MAC should be uppercase');
+});
+
+
+// ==================== Browser Extension ID Tests ====================
+console.log('\n--- Browser Extension ID Tests ---');
+
+test('Detect Chrome extension ID (uBlock Origin)', () => {
+  const iocs = toolkit.extractIOCs('Extension found: cjpalhdlnbpafiamejdnhcphjbkeiagm');
+  const ext = iocs.find(i => i.type === 'Extension ID');
+  assert.ok(ext, 'extension ID not detected');
+  assert.strictEqual(ext.value, 'cjpalhdlnbpafiamejdnhcphjbkeiagm');
+  assert.strictEqual(ext.category, 'extension');
+});
+
+test('Detect extension ID in surrounding alert text', () => {
+  const iocs = toolkit.extractIOCs('Malicious add-on nkbihfbeogaeaoehlefnkodbefgpgknn beaconing to evil.com');
+  assert.ok(iocs.some(i => i.type === 'Extension ID' && i.value === 'nkbihfbeogaeaoehlefnkodbefgpgknn'),
+    'extension ID not detected: ' + JSON.stringify(iocs));
+});
+
+test('32-char hex with digits is MD5, not an extension ID', () => {
+  const iocs = toolkit.extractIOCs('hash d41d8cd98f00b204e9800998ecf8427e');
+  assert.ok(iocs.some(i => i.type === 'MD5'), 'MD5 not detected');
+  assert.ok(!iocs.some(i => i.type === 'Extension ID'),
+    'hex-with-digits must not be an Extension ID: ' + JSON.stringify(iocs));
+});
+
+test('32-char all-a-f string stays MD5, not an extension ID', () => {
+  const fake = 'abcdefabcdefabcdefabcdefabcdefab';
+  const iocs = toolkit.extractIOCs(fake);
+  assert.ok(iocs.some(i => i.type === 'MD5' && i.value === fake), 'MD5 not detected');
+  assert.ok(!iocs.some(i => i.type === 'Extension ID'),
+    'a-f-only string must not be an Extension ID: ' + JSON.stringify(iocs));
+});
+
+test('31 and 33 char runs are not extension IDs', () => {
+  const iocs = toolkit.extractIOCs('cjpalhdlnbpafiamejdnhcphjbkeiag cjpalhdlnbpafiamejdnhcphjbkeiagmm');
+  assert.ok(!iocs.some(i => i.type === 'Extension ID'),
+    'wrong-length runs must not be Extension IDs: ' + JSON.stringify(iocs));
+});
+
+test('Chrome Web Store detail URL also yields an Extension ID', () => {
+  const url = 'https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm';
+  const iocs = toolkit.extractIOCs(`Review ${url}`);
+  assert.ok(iocs.some(i => i.type === 'URL' && i.value === url), 'URL row missing');
+  const ext = iocs.filter(i => i.type === 'Extension ID');
+  assert.ok(ext.length >= 1, 'extension ID row missing from store URL');
+  assert.strictEqual(ext[0].value, 'cjpalhdlnbpafiamejdnhcphjbkeiagm');
+});
+
+test('Edge Add-ons detail URL also yields an Extension ID', () => {
+  const iocs = toolkit.extractIOCs('https://microsoftedge.microsoft.com/addons/detail/odjhifogjcknibkahlpidmdajjpkkcfn');
+  const ext = iocs.filter(i => i.type === 'Extension ID');
+  assert.ok(ext.length >= 1, 'extension ID row missing from Edge store URL');
+  assert.strictEqual(ext[0].value, 'odjhifogjcknibkahlpidmdajjpkkcfn');
 });
 
 // ==================== Defang/Fang Tests ====================

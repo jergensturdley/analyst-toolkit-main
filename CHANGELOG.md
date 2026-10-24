@@ -4,8 +4,19 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Reduced `host_permissions` from 22 to 11: only API hosts actually fetched by the service worker remain. Tab-opened lookups (VirusTotal pages, CyberChef, MITRE, blockchain explorers, MAC vendors, OTX, AbuseIPDB/URLhaus/MalwareBazaar browse pages) need no host permission
+- Vendored `vis-network.js` swapped to the minified 10.0.2 build (~800KB smaller)
+- `package.json` license field corrected from ISC to MIT to match `LICENSE`
+
+### Fixed
+
+- Removed dead `getSelectedText` handler from content.js (unused since the pending-analysis flow landed)
+
 ### Added
 
+- Browser extension ID detection: 32-char Chrome Web Store / Edge Add-ons IDs are extracted standalone and from store detail URLs, with Chrome Web Store and Edge Add-ons OSINT pivot links (no new permissions)
 - Scamalytics IP enrichment (v3 API, free tier): fraud score, risk class, VPN/datacenter/blacklist flags, and bundled MaxMind geo/ASN on a source card; username + API key + node (US/EU) under Settings, plus a built-in Scamalytics OSINT link for IPs
 
 ## [0.6.0] - 2026-10-07

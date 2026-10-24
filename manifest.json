@@ -17,7 +17,6 @@
 
   "host_permissions": [
     "https://www.virustotal.com/*",
-    "https://www.abuseipdb.com/*",
     "https://api.abuseipdb.com/*",
     "https://ipaddress.to/*",
     "https://api11.scamalytics.com/*",
@@ -25,17 +24,7 @@
     "https://ipinfo.io/*",
     "https://urlscan.io/*",
     "https://urlhaus-api.abuse.ch/*",
-    "https://urlhaus.abuse.ch/*",
     "https://mb-api.abuse.ch/*",
-    "https://bazaar.abuse.ch/*",
-    "https://otx.alienvault.com/*",
-    "https://gchq.github.io/*",
-    "https://cyberchef.org/*",
-    "https://macvendors.com/*",
-    "https://www.macvendorlookup.com/*",
-    "https://www.blockchain.com/*",
-    "https://etherscan.io/*",
-    "https://attack.mitre.org/*",
     "https://crt.sh/*",
     "https://checkurl.phishtank.com/*"
   ],

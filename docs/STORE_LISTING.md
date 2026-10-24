@@ -127,26 +127,17 @@ Injects a minimal content script into the active tab to capture selected text wh
 Stores your settings, saved notes, IOC history, and enrichment results locally in the browser using `chrome.storage.local`. This data never leaves your device and is never transmitted to the extension author or any third party.
 
 **Host permissions (enrichment and OSINT lookups)**
-Used to open OSINT lookup links in new tabs and to send enrichment requests when you enrich an indicator (manually, or via the opt-in auto-enrich toggle after one-time consent). The exact hosts granted are:
+Used to send enrichment and lookup API requests when you enrich an indicator (manually, or via the opt-in auto-enrich toggle after one-time consent). Tab-based OSINT lookups (VirusTotal pages, CyberChef, MITRE, blockchain explorers, MAC vendors, OTX, AbuseIPDB/URLhaus/MalwareBazaar browse pages) open as normal browser tabs and need no host permission. The exact hosts granted are:
 
 - `https://www.virustotal.com/*`
-- `https://www.abuseipdb.com/*`
 - `https://api.abuseipdb.com/*`
 - `https://ipaddress.to/*`
 - `https://ipinfo.io/*`
 - `https://urlscan.io/*`
 - `https://urlhaus-api.abuse.ch/*`
-- `https://urlhaus.abuse.ch/*`
 - `https://mb-api.abuse.ch/*`
-- `https://bazaar.abuse.ch/*`
-- `https://otx.alienvault.com/*`
-- `https://gchq.github.io/*`
-- `https://cyberchef.org/*`
-- `https://macvendors.com/*`
-- `https://www.macvendorlookup.com/*`
-- `https://www.blockchain.com/*`
-- `https://etherscan.io/*`
-- `https://attack.mitre.org/*`
+- `https://api11.scamalytics.com/*`
+- `https://api12.scamalytics.com/*`
 - `https://crt.sh/*`
 - `https://checkurl.phishtank.com/*`
 
