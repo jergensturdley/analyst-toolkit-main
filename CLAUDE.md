@@ -47,7 +47,7 @@ No linter, formatter, or bundler is configured. `tests/verify_features.js` regex
 | `manifest.json` | MV3 manifest: permissions, commands, content/background/popup wiring, `side_panel` (Chrome-only — the Firefox build strips the key) |
 | `popup.html` / `popup.js` | The toolbar popup UI. The `SOCToolkit` class (popup.js:32) owns state, IOC parsing, OSINT link generation, graph rendering, snippets, settings, Ask-AI panel |
 | `background.js` | MV3 service worker. Owns cross-origin fetch (popup can't fetch directly), `RateLimiter` (background.js:51), cache I/O, the central `chrome.runtime.onMessage` router (background.js:2199), context menus, notifications |
-| `content.js` | Injected **on demand** via `chrome.scripting.executeScript` (`ensureContentScript` in background.js) — there is no `content_scripts` block in the manifest, so it is not auto-injected into every page. Handles `copyToClipboard`, `toggleSnippets`, `highlightIOCs`, `getSelectedText`, page-snippet UI. Listens via its own `chrome.runtime.onMessage` (content.js:16) |
+| `content.js` | Injected **on demand** via `chrome.scripting.executeScript` (`ensureContentScript` in background.js) — there is no `content_scripts` block in the manifest, so it is not auto-injected into every page. Handles `copyToClipboard`, `toggleSnippets`, `highlightIOCs`, page-snippet UI. Listens via its own `chrome.runtime.onMessage` |
 | `tlds.js` | TLD allow-list used for domain extraction |
 | `vis-network.js` | Vendored graph viz library (the popup's IOC graph) |
 | `css/`, `icons/`, `webfonts/` | Static assets for the popup UI |
@@ -87,7 +87,7 @@ Three execution contexts, connected by `chrome.runtime` messages. Each context o
 ## IOC processing flow
 
 1. User selects text on a page, right-clicks → context menu → "Analyze SOC Toolkit" (background.js), or `Ctrl+Shift+S` to open the popup directly.
-2. Popup receives the selected text via `getPendingAnalysis` from background (the context menu stashed it in `pendingAnalysis` / `chrome.storage.local`). content.js still exposes a `getSelectedText` handler, but nothing in popup/background currently calls it.
+2. Popup receives the selected text via `getPendingAnalysis` from background (the context menu stashed it in `pendingAnalysis` / `chrome.storage.local`).
 3. `SOCToolkit.analyzeIOCs` (popup.js:706) runs the regex bank against the input, dedupes, classifies (IP / domain / URL / hash / email / CVE / MITRE / crypto / MAC), and renders the result list + the vis-network graph.
 4. `generateOSINTLinks` (popup.js:1908) builds per-IOC lookup URLs for ~20 providers; the popup's context menu and `openXxxLookup` family in background.js (`openVirusTotalLookup`, `openAlienVaultLookup`, `openAbuseIPDBLookup`, `openIpInfoLookup`, `openMitreLookup`, `openBlockchainLookup`) open them.
 5. Enrichment agents (per `AGENTS.md`) are invoked via `agentEnrich` → `runAgent` in background, with per-provider caching (`agent_<id>_<type>_<ioc>` keys in `chrome.storage.local`) and `RateLimiter` guarding each provider.

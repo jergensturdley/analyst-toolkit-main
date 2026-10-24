@@ -14,11 +14,6 @@
 
   // Listen for messages from the popup and background script
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "getSelectedText") {
-      const selectedText = window.getSelection().toString().trim();
-      sendResponse({ text: selectedText });
-      return false; // Synchronous response
-    }
     if (request.action === "highlightIOCs") {
       highlightIOCsOnPage(request.iocs);
       sendResponse({ success: true });
