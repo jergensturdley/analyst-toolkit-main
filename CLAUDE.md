@@ -110,7 +110,7 @@ API keys are user-supplied only; never hardcode one. Background fallbacks: when 
 - **Adding a message**: add an `action` to the background router at `background.js:2199`, then send from popup/content. Return `true` from the listener when async.
 - **Adding a new IOC type**: regex + classifier in `popup.js` (see existing `patterns.*` and `analyzeIOCs`), then per-type lookup function in background if there's an OSINT provider for it.
 - **Adding an enrichment agent**: follow the per-IOC-type template in `AGENTS.md` (normalized result format, TTL, rate-limit entry, fallback to web UI). Tests for the agent logic live alongside `SOCToolkitMock` in `tests/verify_features.js` — extend the mock, not the production class, since the test harness does not load `popup.js`.
-- **Visuals**: popup pulls `vis-network.js` (minified vis-network build) and `webfonts/`; themes are defined as CSS classes on `<body>`. New theme = new class in `css/`.
+- **Visuals**: popup pulls `vis-network.js` and `webfonts/`; themes are defined as CSS classes on `<body>`. New theme = new class in `css/`.
 - **Plan/spec docs under `docs/superpowers/`**: when a feature has a spec + plan there, treat them as authoritative for scope and naming before touching the code.
 
 ## Gotchas
@@ -119,4 +119,5 @@ API keys are user-supplied only; never hardcode one. Background fallbacks: when 
 - Several popup→background `sendMessage` call sites do not check `chrome.runtime.lastError` on the callback. If you add a new call, handle the disconnected-worker case (the `safeResponse` wrapper pattern from the 2026-07-07 plan is the established fix).
 - `popup.html` and `popup.js` are large (~80KB / ~140KB); new features belong in the same files unless they introduce a clear new context.
 - `tlds.js` is consumed by both popup.js and the test mock — keep the allow-list in one place.
-- No runtime npm dependencies; `vis-network.js` (the minified vis-network 10.0.2 build) is vendored locally. The only dev dependency is Playwright (store screenshots). Don't add runtime deps or external CDN references without a deliberate decision.
+- `vis-network.js` must stay unminified: CWS rejected v0.5.5 under "Code Readability Requirements" when it was the minified build; 48f44a0 fixed it by vendoring the readable source. Do not swap it (or other vendored files) for minified variants to shrink the package — if CWS flags readability again, `css/all.min.css` is the next candidate to unminify.
+- No runtime npm dependencies; `vis-network.js` is vendored locally, unminified — see Gotchas. The only dev dependency is Playwright (store screenshots). Don't add runtime deps or external CDN references without a deliberate decision.
