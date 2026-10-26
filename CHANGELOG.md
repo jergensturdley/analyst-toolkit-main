@@ -7,7 +7,6 @@ All notable changes to the SOC Analyst Toolkit will be documented in this file.
 ### Changed
 
 - Reduced `host_permissions` from 22 to 11: only API hosts actually fetched by the service worker remain. Tab-opened lookups (VirusTotal pages, CyberChef, MITRE, blockchain explorers, MAC vendors, OTX, AbuseIPDB/URLhaus/MalwareBazaar browse pages) need no host permission
-- Vendored `vis-network.js` swapped to the minified 10.0.2 build (~800KB smaller)
 - `package.json` license field corrected from ISC to MIT to match `LICENSE`
 
 ### Fixed
