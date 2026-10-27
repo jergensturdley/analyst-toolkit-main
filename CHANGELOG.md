@@ -2,12 +2,18 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
-## [Unreleased]
+## [0.6.1] - 2026-10-26
 
 ### Changed
 
 - Reduced `host_permissions` from 22 to 11: only API hosts actually fetched by the service worker remain. Tab-opened lookups (VirusTotal pages, CyberChef, MITRE, blockchain explorers, MAC vendors, OTX, AbuseIPDB/URLhaus/MalwareBazaar browse pages) need no host permission
 - `package.json` license field corrected from ISC to MIT to match `LICENSE`
+- Actions menu moved from the IOC results header up to the toolbar, next to the sort button
+- IOC results no longer scroll inside a fixed 300px box; the tab content scrolls as one page, the filter row sticks to the top while scrolling, and the type tally is a compact single row of pills
+
+### Removed
+
+- threat.rip hash lookup source (site has been offline for months); hash IOCs still link VirusTotal, MalwareBazaar, and Hybrid Analysis
 
 ### Fixed
 
