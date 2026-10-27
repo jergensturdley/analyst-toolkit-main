@@ -1377,7 +1377,8 @@ class SOCToolkit {
     `);
 
     statsEl.innerHTML = statItems.join('');
-    statsEl.style.display = 'grid';
+    // Unset the hidden state and let the .ioc-stats class own the layout.
+    statsEl.style.display = '';
   }
 
   // --- New Helpers ---
@@ -2511,12 +2512,8 @@ class SOCToolkit {
       links.push({ name: 'Pulsedive', url: `https://pulsedive.com/indicator/?ioc=${b64}` });
       links.push({ name: 'ThreatFox', url: `https://threatfox.abuse.ch/browse.php?search=ioc%3A${enc}` });
     }
-    // Hashes: threat.rip and more
+    // Hashes
     if (category === 'hash') {
-      // threat.rip: Use standard single encoding for "hash:<value>"
-      const trQuery = encodeURIComponent(`hash:${value}`);
-      links.push({ name: 'threat.rip', url: `https://threat.rip/search?q=${trQuery}` });
-
       links.push({ name: 'MalwareBazaar', url: `https://bazaar.abuse.ch/browse.php?search=${enc}` });
 
       // Hybrid Analysis: Direct sample link is more precise

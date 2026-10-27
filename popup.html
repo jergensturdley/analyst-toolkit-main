@@ -738,16 +738,16 @@
     .btn-icon {
       padding: 6px 8px;
       gap: 0;
-    }    .ioc-results {
+    }    /* Full-height results: the tab content is the scroll container, so the
+       list is not squeezed into a fixed inner box. */
+    .ioc-results {
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
-      max-height: 300px;
-      overflow-y: auto;
     }
 
     .ioc-item {
-      padding: 10px 14px;
+      padding: 6px 10px;
       border-bottom: 1px solid var(--border-primary);
       display: flex;
       align-items: center;
@@ -1296,7 +1296,6 @@
     /* Spacious but never overflowing: padding up, wrapping button groups,
        2-up stats, and the 400px float-mode floor relaxed. */
     body.panel .tab-content { padding: 14px 12px; }
-    body.panel .ioc-stats { grid-template-columns: repeat(2, 1fr); }
     body.panel .btn-group { flex-wrap: wrap; }
     body.panel .ioc-item { padding: 12px 10px; }
     body.panel.float-mode { min-width: 0; }
@@ -1342,7 +1341,6 @@
       }
 
       .tab-content { padding: 14px 12px; }
-      .ioc-stats { grid-template-columns: repeat(2, 1fr); }
       .btn-group { flex-wrap: wrap; }
       .ioc-item { padding: 12px 10px; }
       body.float-mode { min-width: 0; }
@@ -1353,9 +1351,7 @@
   margin-left: 6px;
 }
 
-/* IOC Results Header + Footer Buttons */
-.ioc-controls .btn,
-.ioc-controls .dropdown > .btn,
+/* IOC Footer Buttons */
 .ioc-footer .btn,
 .ioc-footer .dropdown > .btn {
   margin-left: 6px;
@@ -1378,13 +1374,6 @@
   white-space: nowrap;
 }
 
-.ioc-controls {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-wrap: wrap;
-}
-
 /* IOC Input Container */
 #ioc-tab .input-container {
   display: flex;
@@ -1395,38 +1384,39 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
-/* IOC Statistics */
+/* IOC Statistics: compact pill row instead of a tall card grid */
 .ioc-stats {
   background: var(--bg-accent);
   border: 1px solid var(--border-secondary);
   border-radius: 6px;
-  padding: 12px;
-  margin: 8px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
+  padding: 6px 8px;
+  margin: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .stat-item {
-  text-align: center;
-  padding: 8px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
   background: var(--bg-secondary);
-  border-radius: 4px;
+  border-radius: 999px;
   border: 1px solid var(--border-secondary);
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 12px;
   font-weight: bold;
   color: var(--text-primary);
-  display: block;
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
   text-transform: uppercase;
-  margin-top: 4px;
 }
 
 /* IOC footer bulk actions */
@@ -1514,7 +1504,15 @@
     .ioc-graph-header {
       margin-top: 12px;
     }
+    /* Sticky filter row: keeps search + expand-all in view while the
+       tab-content scroller moves through long IOC lists. */
     .ioc-list-header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-primary);
+      padding: 6px 10px;
       margin-top: 10px;
     }
     .ioc-graph-header button,
@@ -2143,7 +2141,7 @@
         <i class="fa-solid fa-shield-halved"></i>
         SOC Toolkit
       </h1>
-      <div class="version" id="versionLabel">v0.6.0</div>
+      <div class="version" id="versionLabel">v0.6.1</div>
     </div>
     <div class="header-controls">
       <button class="control-btn" id="showKeyboardShortcuts" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts">
@@ -2268,38 +2266,11 @@
       <button class="btn btn-secondary btn-icon" id="sortBtn" title="Sort IOCs alphabetically" aria-label="Sort IOCs">
         <i class="fa-solid fa-arrow-down-a-z" aria-hidden="true"></i>
       </button>
-    </div>
-
-    <div class="settings-row">
-      <label class="setting-item">
-        <input type="checkbox" id="autoAnalyzeToggle" checked>
-        <span class="checkmark"></span>
-        Auto-analyze IOCs
-      </label>
-      <label class="setting-item">
-        <input type="checkbox" id="autoEnrichToggle">
-        <span class="checkmark"></span>
-        Auto-enrich found IOCs
-      </label>
-      <span class="help-text" title="Defanged IOCs (hxxp://, [.] ) are automatically refanged during analysis">
-        <i class="fa-solid fa-circle-info"></i> Auto-refang enabled
-      </span>
-    </div>
-
-    <!-- prefixes input moved to Snippets tab -->
-    
-    <!-- IOC Statistics -->
-    <div id="iocStats" class="ioc-stats" style="display: none;"></div>
-
-<div class="ioc-results" id="iocResults">
-  <!-- IOC Results Header -->
-  <div class="ioc-header">
-    <span class="ioc-count">IOC Results [0]</span>
-    <div class="ioc-controls">
-      <!-- Quick Copy Dropdown -->
+      <span class="btn-separator" aria-hidden="true"></span>
+      <!-- Actions dropdown: copy, enrich, export, filter, graph -->
       <div class="dropdown">
-        <button class="btn btn-small" id="actionsMenuBtn">
-          <i class="fa-solid fa-ellipsis"></i> Actions ▼
+        <button class="btn btn-secondary" id="actionsMenuBtn" title="Copy, enrich, export, filter, and graph actions" aria-haspopup="true" aria-label="Actions menu">
+          <i class="fa-solid fa-ellipsis" aria-hidden="true"></i> Actions ▼
         </button>
         <div class="dropdown-menu" id="actionsMenu">
           <span class="menu-group-label">Copy</span>
@@ -2340,6 +2311,32 @@
         </div>
       </div>
     </div>
+
+    <div class="settings-row">
+      <label class="setting-item">
+        <input type="checkbox" id="autoAnalyzeToggle" checked>
+        <span class="checkmark"></span>
+        Auto-analyze IOCs
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="autoEnrichToggle">
+        <span class="checkmark"></span>
+        Auto-enrich found IOCs
+      </label>
+      <span class="help-text" title="Defanged IOCs (hxxp://, [.] ) are automatically refanged during analysis">
+        <i class="fa-solid fa-circle-info"></i> Auto-refang enabled
+      </span>
+    </div>
+
+    <!-- prefixes input moved to Snippets tab -->
+    
+    <!-- IOC Statistics -->
+    <div id="iocStats" class="ioc-stats" style="display: none;"></div>
+
+<div class="ioc-results" id="iocResults">
+  <!-- IOC Results Header -->
+  <div class="ioc-header">
+    <span class="ioc-count">IOC Results [0]</span>
   </div>
 
   <!-- Bulk OSINT link toggle -->

@@ -53,7 +53,6 @@
 ### Hash & Malware Analysis
 - **MalwareBazaar**: Malware sample sharing (NEW)
 - **Hybrid Analysis**: Automated malware analysis (NEW)
-- **threat.rip**: Threat intelligence aggregation
 
 ### Vulnerability Research
 - **NVD**: National Vulnerability Database
