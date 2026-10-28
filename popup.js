@@ -89,9 +89,9 @@ function toCsvCell(value) {
   return '"' + v.replace(/"/g, '""') + '"';
 }
 
-// Lightweight synchronous hash replacement for MD5 (keeps API)
-// Not cryptographic — used as a deterministic identifier within the popup.
-const MD5 = {
+// 32-bit FNV-1a — a fast deterministic identifier, not a cryptographic hash
+// and definitely not MD5 (32-bit output). Used for graph edge ids.
+const FNV1A = {
   hash(s) {
     let h = 2166136261 >>> 0;
     for (let i = 0; i < s.length; i++) {
@@ -99,11 +99,6 @@ const MD5 = {
       h = Math.imul(h, 16777619) >>> 0;
     }
     return ('00000000' + (h >>> 0).toString(16)).slice(-8);
-  },
-  hashArray(uint8Array) {
-    let s = '';
-    for (let i = 0; i < uint8Array.length; i++) s += String.fromCharCode(uint8Array[i]);
-    return this.hash(s);
   }
 };
 
@@ -332,7 +327,7 @@ class SOCToolkit {
     document.getElementById('iocInput').value = iocText;
     this.switchTab('ioc');
     this.analyzeIOCs();
-    this.showStatus('IOCs extracted and displayed', 'success');
+    this.showNotification('IOCs extracted and displayed', 'success');
   }
 
   normalizeEnrichType(category) {
@@ -2441,10 +2436,6 @@ class SOCToolkit {
     }
   }
 
-  showStatus(message, type = 'info') {
-    this.showNotification(message, type);
-  }
-
   showNotification(message, type = 'success') {
     const note = document.createElement('div');
     note.className = `notification ${type}`;
@@ -3082,15 +3073,15 @@ class SOCToolkit {
       const response = await chrome.runtime.sendMessage({ action: 'toggleFloat' });
       if (response && response.success) {
         if (response.action === 'opened') {
-          this.showStatus('Floating window opened', 'success');
+          this.showNotification('Floating window opened', 'success');
           // Close the popup after a short delay
           setTimeout(() => window.close(), 500);
         } else if (response.action === 'closed') {
-          this.showStatus('Floating window closed', 'info');
+          this.showNotification('Floating window closed', 'info');
         }
       }
     } catch (e) {
-      this.showStatus('Error toggling floating window', 'error');
+      this.showNotification('Error toggling floating window', 'error');
     }
   }
 
@@ -3102,7 +3093,7 @@ class SOCToolkit {
       const win = await chrome.windows.getCurrent();
       if (win) await chrome.sidePanel.open({ windowId: win.id });
     } catch (e) {
-      this.showStatus('Error opening the side panel', 'error');
+      this.showNotification('Error opening the side panel', 'error');
     }
   }
 
@@ -3870,7 +3861,7 @@ class SOCToolkit {
         label: effectiveLabel,
         source: edge.properties?.source || ''
       };
-      const computedEdgeId = 'edge_' + MD5.hash(JSON.stringify(edgeDescriptor));
+      const computedEdgeId = 'edge_' + FNV1A.hash(JSON.stringify(edgeDescriptor));
       const edgeId = edge.id || computedEdgeId;
       if (!this.graphEdges.get(edgeId)) {
         this.graphEdges.add({
@@ -4411,7 +4402,7 @@ class SOCToolkit {
     const resultsDiv = document.getElementById('fileHashResults');
 
     if (file) {
-      fileNameSpan.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
+      fileNameSpan.textContent = `${file.name} (${this.formatBytes(file.size)})`;
       hashBtn.style.display = 'inline-block';
       resultsDiv.style.display = 'none';
       this.selectedFile = file;
@@ -4421,14 +4412,6 @@ class SOCToolkit {
       resultsDiv.style.display = 'none';
       this.selectedFile = null;
     }
-  }
-
-  formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
   async hashSelectedFile() {
@@ -4446,7 +4429,7 @@ class SOCToolkit {
       const arrayBuffer = await this.selectedFile.arrayBuffer();
 
       // Calculate hashes. MD5 is intentionally omitted: the Web Crypto API does
-      // not implement it, and the popup's FNV-1a `MD5` helper is a 32-bit
+      // not implement it, and the popup's FNV-1a helper is a 32-bit
       // identifier — not a real MD5 — so surfacing it as a file MD5 would emit a
       // bogus IOC.
       const [sha1Hash, sha256Hash] = await Promise.all([
@@ -4455,7 +4438,7 @@ class SOCToolkit {
       ]);
 
       const results = `File: ${this.selectedFile.name}
-Size: ${this.formatFileSize(this.selectedFile.size)}
+Size: ${this.formatBytes(this.selectedFile.size)}
 SHA1:   ${sha1Hash}
 SHA256: ${sha256Hash}
 Type:   ${this.selectedFile.type || 'Unknown'}`;
@@ -4464,10 +4447,10 @@ Type:   ${this.selectedFile.type || 'Unknown'}`;
       resultsDiv.style.display = 'block';
       this.fileHashResults = results;
 
-      this.showStatus('File hashes calculated successfully', 'success');
+      this.showNotification('File hashes calculated successfully', 'success');
     } catch (error) {
       console.error('Error calculating file hashes:', error);
-      this.showStatus('Failed to calculate file hashes', 'error');
+      this.showNotification('Failed to calculate file hashes', 'error');
     } finally {
       // Restore button state
       hashBtn.innerHTML = '<i class="fa-solid fa-calculator"></i> Calculate Hashes';
@@ -4498,9 +4481,9 @@ Type:   ${this.selectedFile.type || 'Unknown'}`;
   copyFileHashes() {
     if (this.fileHashResults) {
       navigator.clipboard.writeText(this.fileHashResults).then(() => {
-        this.showStatus('File hashes copied to clipboard', 'success');
+        this.showNotification('File hashes copied to clipboard', 'success');
       }).catch(() => {
-        this.showStatus('Failed to copy to clipboard', 'error');
+        this.showNotification('Failed to copy to clipboard', 'error');
       });
     }
   }

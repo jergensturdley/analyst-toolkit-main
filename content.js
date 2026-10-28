@@ -53,26 +53,9 @@
     
   }
 
-  // Enhanced clipboard functionality
+  // Clipboard: MV3 targets (Chrome 88+, Firefox 128+) always ship
+  // navigator.clipboard — no execCommand fallback needed.
   async function copyToClipboard(text) {
-    if (!navigator.clipboard) {
-      // Fallback for older browsers
-      try {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        showPageNotification('📋 Copied to clipboard!', 'success');
-      } catch (err) {
-        showPageNotification('❌ Failed to copy.', 'error');
-      }
-      return;
-    }
-
     try {
       await navigator.clipboard.writeText(text);
       showPageNotification('📋 Copied to clipboard!', 'success');

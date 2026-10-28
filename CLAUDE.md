@@ -38,7 +38,7 @@ npm test   # tests/verify_features.js + tests/verify_popup.js + tests/verify_bac
 # Changes are picked up via the service-worker reload button; popup.js/html edits require closing+reopening the popup.
 ```
 
-No linter, formatter, or bundler is configured. `tests/verify_features.js` regex-tests a hand-rolled `SOCToolkitMock`; `tests/verify_popup.js` and `tests/verify_background.js` load the real `popup.js`/`background.js` into Node `vm` sandboxes (through `tests/popup_harness.js` and `tests/background_harness.js`) with DOM/chrome/fetch stubs, so behavior tests run against production code. Prefer the harness suites for new behavior tests.
+No linter, formatter, or bundler is configured. All three suites load the real `popup.js`/`background.js` into Node `vm` sandboxes (through `tests/popup_harness.js` and `tests/background_harness.js`) with DOM/chrome/fetch stubs, so every behavior test runs against production code. There is no parallel mock of the extraction pipeline, extend the harness suites, not a copy.
 
 ## File map
 
@@ -51,7 +51,7 @@ No linter, formatter, or bundler is configured. `tests/verify_features.js` regex
 | `tlds.js` | TLD allow-list used for domain extraction |
 | `vis-network.js` | Vendored graph viz library (the popup's IOC graph) |
 | `css/`, `icons/`, `webfonts/` | Static assets for the popup UI |
-| `tests/verify_features.js` | Node-based IOC parser/regex smoke tests against the `SOCToolkitMock` |
+| `tests/verify_features.js` | Node-based IOC parser/regex smoke tests against the real `popup.js` + `background.js` via the VM harnesses |
 | `tests/popup_harness.js` / `tests/verify_popup.js` | VM loader for the real `popup.js` and the behavior tests that drive it (dedupe, IPv6 extraction, row actions, settings, snippets, export) |
 | `tests/background_harness.js` / `tests/verify_background.js` | VM loader for the real `background.js` (fetch-stubbed) and the enrichment-agent tests (error taxonomy, VT shapes, URLhaus status, cache eviction, rate budget) |
 | `AGENTS.md` | Enrichment-agent design doc (architecture, rate limits, caching, per-IOC-type agent specs) — read before touching enrichment code |
@@ -109,7 +109,7 @@ API keys are user-supplied only; never hardcode one. Background fallbacks: when 
 - **Context placement**: state belongs in popup, fetches belong in background, DOM access belongs in content. Don't fetch from popup.js.
 - **Adding a message**: add an `action` to the background router at `background.js:2199`, then send from popup/content. Return `true` from the listener when async.
 - **Adding a new IOC type**: regex + classifier in `popup.js` (see existing `patterns.*` and `analyzeIOCs`), then per-type lookup function in background if there's an OSINT provider for it.
-- **Adding an enrichment agent**: follow the per-IOC-type template in `AGENTS.md` (normalized result format, TTL, rate-limit entry, fallback to web UI). Tests for the agent logic live alongside `SOCToolkitMock` in `tests/verify_features.js` — extend the mock, not the production class, since the test harness does not load `popup.js`.
+- **Adding an enrichment agent**: follow the per-IOC-type template in `AGENTS.md` (normalized result format, TTL, rate-limit entry, fallback to web UI). Tests live in `tests/verify_features.js` / `tests/verify_background.js` and run the real production code through the VM harnesses.
 - **Visuals**: popup pulls `vis-network.js` and `webfonts/`; themes are defined as CSS classes on `<body>`. New theme = new class in `css/`.
 - **Plan/spec docs under `docs/superpowers/`**: when a feature has a spec + plan there, treat them as authoritative for scope and naming before touching the code.
 
