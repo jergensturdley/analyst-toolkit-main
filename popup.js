@@ -4602,14 +4602,23 @@ class SOCToolkit {
 
   analyzeCommandLine(raw, depth = 0) {
     const { text, findings } = this._normalizeCommandLine(raw);
+    const rawText = String(raw);
     const matched = [];
     for (const rule of this.CMDLINE_RULES) {
-      const m = rule.re.exec(text);
+      // Prefer the normalized text; fall back to the raw text so the
+      // obfuscation-artifact rules (carets, backticks) can still fire —
+      // normalization strips exactly the characters they look for.
+      let src = text;
+      let m = rule.re.exec(src);
+      if (!m && rawText !== text) {
+        src = rawText;
+        m = rule.re.exec(src);
+      }
       if (!m) continue;
       // Pivot: indicators near the matched span get OSINT links in the UI.
       // The URL often sits inside the parens the pattern stops at, so look
       // at a window around the match, not just the matched text.
-      const window = text.slice(Math.max(0, m.index - 80), m.index + m[0].length + 80);
+      const window = src.slice(Math.max(0, m.index - 80), m.index + m[0].length + 80);
       const hitIocs = this.extractIOCs(window).slice(0, 5);
       matched.push({ ...rule, snippet: m[0].slice(0, 120), iocs: hitIocs });
     }
