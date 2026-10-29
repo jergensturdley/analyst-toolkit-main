@@ -4578,16 +4578,65 @@ class SOCToolkit {
     return { text, findings };
   }
 
-  analyzeCommandLine(raw) {
+  // Try to decode Base64(-url) blobs >= 40 chars embedded in a command.
+  // PowerShell -EncodedCommand payloads are UTF-16LE, so both UTF-8 and
+  // UTF-16LE are attempted; a decode counts when it is mostly printable.
+  _tryDecodeBase64Blobs(text) {
+    const out = [];
+    for (const m of String(text).matchAll(/[A-Za-z0-9+/_-]{40,}={0,2}/g)) {
+      let bin;
+      try { bin = atob(m[0].replace(/-/g, '+').replace(/_/g, '/')); } catch (e) { continue; }
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      for (const enc of ['utf-8', 'utf-16le']) {
+        let decoded;
+        try { decoded = new TextDecoder(enc, { fatal: false }).decode(bytes); } catch (e) { continue; }
+        const printable = [...decoded].filter((ch) => ch === '\n' || ch === '\t' || (ch >= ' ' && ch <= '~')).length;
+        if (decoded.trim().length >= 8 && printable / Math.max(decoded.length, 1) > 0.9) {
+          out.push({ blob: m[0], decoded, enc });
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  analyzeCommandLine(raw, depth = 0) {
     const { text, findings } = this._normalizeCommandLine(raw);
     const matched = [];
-    let score = 0;
     for (const rule of this.CMDLINE_RULES) {
       const m = rule.re.exec(text);
       if (!m) continue;
-      matched.push({ ...rule, snippet: m[0].slice(0, 80) });
+      // Pivot: indicators near the matched span get OSINT links in the UI.
+      // The URL often sits inside the parens the pattern stops at, so look
+      // at a window around the match, not just the matched text.
+      const window = text.slice(Math.max(0, m.index - 80), m.index + m[0].length + 80);
+      const hitIocs = this.extractIOCs(window).slice(0, 5);
+      matched.push({ ...rule, snippet: m[0].slice(0, 120), iocs: hitIocs });
     }
+
+    // Decode embedded Base64 and run the rules against the payload too
+    // (one level deep). Encoded cradles are the whole reason this matters.
+    let decodedText = null;
+    if (depth === 0) {
+      const blobs = this._tryDecodeBase64Blobs(text);
+      if (blobs.length) {
+        const first = blobs[0];
+        decodedText = first.decoded;
+        findings.push({
+          sev: 'medium', title: 'Decoded Base64 payload',
+          why: `The encoded block decodes (${first.enc}) to the text below; the rules also ran against it.`,
+          decodedText: first.decoded.slice(0, 600)
+        });
+        const sub = this.analyzeCommandLine(first.decoded, 1);
+        for (const m2 of sub.matched) {
+          if (!matched.some((m) => m.id === m2.id)) matched.push({ ...m2, via: 'decoded payload' });
+        }
+        for (const f2 of sub.findings) findings.push(f2);
+      }
+    }
+
     const all = matched.concat(findings);
+    let score = 0;
     for (const hit of all) score += this.CMDLINE_SEVERITY_WEIGHT[hit.sev] || 0;
     score = Math.min(100, score);
     // Severity-aware verdict: a single critical or two high-severity hits
@@ -4599,7 +4648,22 @@ class SOCToolkit {
     else if (all.some((h) => h.sev === 'critical') || highs >= 2 || score >= 60) verdict = 'malicious';
     else if (highs >= 1 || score >= 15) verdict = 'suspicious';
     else verdict = 'review';
-    return { verdict, score, matched, findings };
+
+    // Global indicator pivot: everything extractable from the (normalized,
+    // and if present decoded) text, deduped by value.
+    const seen = new Set();
+    const iocs = [];
+    for (const src of [text, decodedText]) {
+      if (!src) continue;
+      for (const ioc of this.extractIOCs(src)) {
+        const k = ioc.value.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        iocs.push(ioc);
+      }
+    }
+
+    return { verdict, score, matched, findings, iocs, decodedText };
   }
 
   runCommandLineTool() {
@@ -4619,22 +4683,44 @@ class SOCToolkit {
       (result.matched.length + result.findings.length
         ? ` <span class="cmdline-score">score ${result.score}/100 · heuristic</span>`
         : ' <span class="cmdline-score">heuristic — absence of matches is not proof of safety</span>');
+    const osintLinks = (ioc) => this.generateOSINTLinks(ioc.value, ioc.category)
+      .map((l) => `<a class="osint-link" href="${this.escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer" title="${this.escapeHtml(l.name)}">${this.escapeHtml(l.name)}</a>`)
+      .join('');
+    const iocRows = (iocs) => iocs
+      .map((ioc) => `<div class="cmdline-ioc"><span class="cmdline-ioc-value">${this.escapeHtml(ioc.value)}</span><span class="cmdline-ioc-links">${osintLinks(ioc)}</span></div>`)
+      .join('');
+
     const hits = result.matched.concat(result.findings);
-    out.innerHTML = hits.length === 0
-      ? '<div class="settings-hint">No known suspicious patterns matched. This is a heuristic check, not a verdict.</div>'
-      : hits
-          .map((hit) => {
-            const mitre = hit.mitre
-              ? ` <a class="cmdline-mitre" href="https://attack.mitre.org/techniques/${this.escapeHtml(hit.mitre.replace('.', '/'))}/" target="_blank" rel="noopener noreferrer" title="MITRE ATT&CK technique">${this.escapeHtml(hit.mitre)}</a>`
-              : '';
-            const snippet = hit.snippet ? `<code class="cmdline-snippet">${this.escapeHtml(hit.snippet)}</code>` : '';
-            return `<div class="cmdline-finding">
-              <div class="cmdline-finding-head"><b>${this.escapeHtml(hit.title)}</b>${mitre}</div>
-              <div class="cmdline-why">${this.escapeHtml(hit.why)}</div>
-              ${snippet}
-            </div>`;
-          })
-          .join('');
+    // A URL near several matches would repeat per finding; show each value
+    // once above the Indicators block, which lists them all.
+    const shownValues = new Set();
+    const findingsHtml = hits.map((hit) => {
+      const mitre = hit.mitre
+        ? ` <a class="cmdline-mitre" href="https://attack.mitre.org/techniques/${this.escapeHtml(hit.mitre.replace('.', '/'))}/" target="_blank" rel="noopener noreferrer" title="MITRE ATT&CK technique">${this.escapeHtml(hit.mitre)}</a>`
+        : '';
+      const snippet = hit.snippet ? `<code class="cmdline-snippet">${this.escapeHtml(hit.snippet)}</code>` : '';
+      const decoded = hit.decodedText ? `<pre class="cmdline-snippet cmdline-decoded">${this.escapeHtml(hit.decodedText)}</pre>` : '';
+      const freshIocs = (hit.iocs || []).filter((i) => { const k = i.value.toLowerCase(); if (shownValues.has(k)) return false; shownValues.add(k); return true; });
+      const iocs = freshIocs.length ? `<div class="osint-links cmdline-hit-iocs">${iocRows(freshIocs)}</div>` : '';
+      return `<div class="cmdline-finding">
+        <div class="cmdline-finding-head"><b>${this.escapeHtml(hit.title)}</b>${mitre}</div>
+        <div class="cmdline-why">${this.escapeHtml(hit.why)}</div>
+        ${snippet}
+        ${decoded}
+        ${iocs}
+      </div>`;
+    }).join('');
+
+    const iocs = result.iocs || [];
+    const shown = iocs.slice(0, 10);
+    const iocsHtml = iocs.length
+      ? `<div class="cmdline-iocs-head">Indicators in this text${iocs.length > 10 ? ` (${iocs.length})` : ''}</div>` +
+        `<div class="osint-links cmdline-global-iocs">${iocRows(shown)}</div>` +
+        (iocs.length > 10 ? `<div class="settings-hint">+${iocs.length - 10} more in the IOC tab</div>` : '')
+      : '';
+
+    out.innerHTML = (findingsHtml ||
+      '<div class="settings-hint">No known suspicious patterns matched. This is a heuristic check, not a verdict.</div>') + iocsHtml;
   }
 
   // Auto-offer in the IOC results header: shows the small "command line"

