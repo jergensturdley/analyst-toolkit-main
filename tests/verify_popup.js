@@ -894,11 +894,13 @@ async function main() {
     assert.strictEqual(iocTab.classList.contains('active'), false, 'ioc-tab must deactivate');
   });
 
-  await test('Alt+3 keydown switches to the tools tab', () => {
+  await test('Alt+2 keydown switches to the tools tab (Alt+3 to snippets)', () => {
     const keydown = document._listeners.keydown;
     assert.ok(keydown, 'global keydown handler not bound');
+    keydown({ altKey: true, key: '2', target: { matches: () => false }, preventDefault() {} });
+    assert.strictEqual(toolkit.currentTab, 'tools', 'Alt+2 must open the tools tab');
     keydown({ altKey: true, key: '3', target: { matches: () => false }, preventDefault() {} });
-    assert.strictEqual(toolkit.currentTab, 'tools', 'Alt+3 must open the tools tab');
+    assert.strictEqual(toolkit.currentTab, 'snippets', 'Alt+3 must open the snippets tab');
   });
 
   await test('file-hash buttons stay bound after the move to the tools tab', () => {

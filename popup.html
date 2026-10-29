@@ -2228,8 +2228,8 @@
         <div style="margin-bottom:16px;">
           <h4 style="color:var(--text-primary); margin:0 0 8px 0; font-size:13px;">Navigation</h4>
           <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>IOC Analysis tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+1</kbd></div>
-          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Snippets tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+2</kbd></div>
-          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Tools tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+3</kbd></div>
+          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Tools tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+2</kbd></div>
+          <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Snippets tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+3</kbd></div>
           <div style="display:flex; justify-content:space-between; margin:4px 0;"><span>Settings tab</span><kbd style="background:var(--bg-accent); padding:2px 8px; border-radius:4px; font-family:monospace;">Alt+4</kbd></div>
         </div>
         <div style="margin-bottom:16px;">
@@ -2271,13 +2271,13 @@
       <i class="fa-solid fa-search" aria-hidden="true"></i>
       IOC Analysis
     </button>
-    <button class="tab-btn" data-tab="snippets" role="tab" aria-selected="false" aria-controls="snippets-tab">
-      <i class="fa-solid fa-code" aria-hidden="true"></i>
-      Snippets
-    </button>
     <button class="tab-btn" data-tab="tools" role="tab" aria-selected="false" aria-controls="tools-tab">
       <i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>
       Tools
+    </button>
+    <button class="tab-btn" data-tab="snippets" role="tab" aria-selected="false" aria-controls="snippets-tab">
+      <i class="fa-solid fa-code" aria-hidden="true"></i>
+      Snippets
     </button>
     <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="settings-tab">
       <i class="fa-solid fa-cog" aria-hidden="true"></i>
@@ -2531,34 +2531,6 @@
   <!-- Tools Tab -->
   <div class="tab-content" id="tools-tab" role="tabpanel" aria-label="Tools">
 
-    <!-- File Hash Analysis (moved from the IOC tab to free vertical space) -->
-    <details class="settings-section" id="toolCard_filehash" open>
-      <summary class="settings-section-header tool-card-summary">
-        <i class="fa-solid fa-file-shield" aria-hidden="true"></i> File Hash Analysis
-        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
-      </summary>
-      <div class="settings-section-body tool-card-body" id="toolCardBody_filehash">
-        <div class="file-hash-controls">
-          <input type="file" id="fileHashInput" style="display: none;">
-          <button id="selectFileBtn" class="btn">
-            <i class="fa-solid fa-file-arrow-up"></i> Select File
-          </button>
-          <span id="selectedFileName" class="file-hash-filename"></span>
-          <button id="hashFileBtn" class="btn" style="display: none;">
-            <i class="fa-solid fa-calculator"></i> Calculate Hashes
-          </button>
-        </div>
-        <div id="fileHashResults" class="file-hash-results">
-          <div class="hash-label">File Hashes:</div>
-          <div id="fileHashOutput" class="file-hash-output"></div>
-          <button id="copyFileHashBtn" class="btn">
-            <i class="fa-solid fa-copy"></i> Copy Hashes
-          </button>
-        </div>
-        <div class="tool-card-grip" id="toolGrip_filehash" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
-      </div>
-    </details>
-
     <!-- Transform workbench -->
     <details class="settings-section" id="toolCard_transform" open>
       <summary class="settings-section-header tool-card-summary">
@@ -2585,6 +2557,25 @@
           </button>
         </div>
         <div class="tool-card-grip" id="toolGrip_transform" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
+      </div>
+    </details>
+
+    <!-- Command Line Analyzer (heuristic, local-only) -->
+    <details class="settings-section" id="toolCard_cmdline" open>
+      <summary class="settings-section-header tool-card-summary">
+        <i class="fa-solid fa-terminal" aria-hidden="true"></i> Command Line Analyzer
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+      </summary>
+      <div class="settings-section-body tool-card-body" id="toolCardBody_cmdline">
+        <textarea id="cmdLineInput" class="snippet-content-input" style="min-height:70px;" placeholder="powershell -nop -w hidden -enc SQBFAFgA…  or  curl -s http://… | bash" aria-label="Command line to analyze"></textarea>
+        <div class="settings-row-inline">
+          <button id="cmdLineAnalyzeBtn" class="btn btn-primary btn-small">
+            <i class="fa-solid fa-play" aria-hidden="true"></i> Analyze
+          </button>
+          <span id="cmdLineVerdict" role="status" aria-live="polite"></span>
+        </div>
+        <div id="cmdLineResults" class="settings-shortcuts-list"></div>
+        <div class="tool-card-grip" id="toolGrip_cmdline" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
     </details>
 
@@ -2631,22 +2622,31 @@
       </div>
     </details>
 
-    <!-- Command Line Analyzer (heuristic, local-only) -->
-    <details class="settings-section" id="toolCard_cmdline" open>
+    <!-- File Hash Analysis (moved from the IOC tab to free vertical space) -->
+    <details class="settings-section" id="toolCard_filehash" open>
       <summary class="settings-section-header tool-card-summary">
-        <i class="fa-solid fa-terminal" aria-hidden="true"></i> Command Line Analyzer
+        <i class="fa-solid fa-file-shield" aria-hidden="true"></i> File Hash Analysis
         <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
       </summary>
-      <div class="settings-section-body tool-card-body" id="toolCardBody_cmdline">
-        <textarea id="cmdLineInput" class="snippet-content-input" style="min-height:70px;" placeholder="powershell -nop -w hidden -enc SQBFAFgA…  or  curl -s http://… | bash" aria-label="Command line to analyze"></textarea>
-        <div class="settings-row-inline">
-          <button id="cmdLineAnalyzeBtn" class="btn btn-primary btn-small">
-            <i class="fa-solid fa-play" aria-hidden="true"></i> Analyze
+      <div class="settings-section-body tool-card-body" id="toolCardBody_filehash">
+        <div class="file-hash-controls">
+          <input type="file" id="fileHashInput" style="display: none;">
+          <button id="selectFileBtn" class="btn">
+            <i class="fa-solid fa-file-arrow-up"></i> Select File
           </button>
-          <span id="cmdLineVerdict" role="status" aria-live="polite"></span>
+          <span id="selectedFileName" class="file-hash-filename"></span>
+          <button id="hashFileBtn" class="btn" style="display: none;">
+            <i class="fa-solid fa-calculator"></i> Calculate Hashes
+          </button>
         </div>
-        <div id="cmdLineResults" class="settings-shortcuts-list"></div>
-        <div class="tool-card-grip" id="toolGrip_cmdline" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
+        <div id="fileHashResults" class="file-hash-results">
+          <div class="hash-label">File Hashes:</div>
+          <div id="fileHashOutput" class="file-hash-output"></div>
+          <button id="copyFileHashBtn" class="btn">
+            <i class="fa-solid fa-copy"></i> Copy Hashes
+          </button>
+        </div>
+        <div class="tool-card-grip" id="toolGrip_filehash" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
     </details>
   </div>

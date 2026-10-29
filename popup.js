@@ -163,7 +163,7 @@ class SOCToolkit {
     this._osintLinksCache = new Map();
     // Tool cards: one registry drives persistence (socSettings.toolCards),
     // the reconciler and the resize wiring.
-    this.TOOL_CARD_IDS = ['filehash', 'transform', 'regex', 'unfurl', 'cmdline'];
+    this.TOOL_CARD_IDS = ['transform', 'cmdline', 'regex', 'unfurl', 'filehash'];
     this.toolCards = {};
     // Tools tab: registry-driven transforms, not scattered conditionals.
     // fn throws on bad input; runTextTool catches and shows the message.
@@ -883,8 +883,8 @@ class SOCToolkit {
       // Quick navigation with numbers
       if (e.altKey && !e.target.matches?.('input, textarea')) {
         if (e.key === '1') { e.preventDefault(); this.switchTab('ioc'); }
-        if (e.key === '2') { e.preventDefault(); this.switchTab('snippets'); }
-        if (e.key === '3') { e.preventDefault(); this.switchTab('tools'); }
+        if (e.key === '2') { e.preventDefault(); this.switchTab('tools'); }
+        if (e.key === '3') { e.preventDefault(); this.switchTab('snippets'); }
         if (e.key === '4') { e.preventDefault(); this.switchTab('settings'); }
       }
     });
