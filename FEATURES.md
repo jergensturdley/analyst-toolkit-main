@@ -242,7 +242,14 @@ Every card collapses to its header and drag-resizes via its bottom grip; both st
 - Breaks a URL into scheme, host, port, path, fragment and each decoded query parameter
 - "Extract URLs" lists every URL found in pasted text (defanged URLs are refanged first)
 
-All tools run locally in the popup — no network calls.
+### Command Line Analyzer
+- Paste a Windows or sh/bash command line and get a plain-English explanation of every suspicious pattern: what it does, why it is flagged, and a MITRE ATT&CK technique link
+- ~45 local heuristics: encoded PowerShell, download cradles (IEX/DownloadString, certutil, bitsadmin, msiexec), LOLBin proxy execution (mshta, rundll32, regsvr32), persistence (schtasks, run keys, cron), credential access, reverse shells, `curl | bash`, and more
+- Cuts through common obfuscation before matching: caret splitting (`c^u^r^l`), backtick escaping, mixed-case spelling (`iNvOkE-eXpReSsIoN`), string concatenation, `%VAR%` assembly, each obfuscation trick is reported as its own finding
+- Verdict chip + 0-100 heuristic score; results are advisory, never a claim
+- When IOC analysis input looks like a command line, a small "Analyze as command line" button appears in the results header and jumps straight to the tool with the text loaded
+
+All tools run locally in the popup, no network calls.
 
 ## 🎯 Context Menu Integration
 

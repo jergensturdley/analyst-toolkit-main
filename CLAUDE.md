@@ -45,7 +45,7 @@ No linter, formatter, or bundler is configured. All three suites load the real `
 | File | Role |
 |---|---|
 | `manifest.json` | MV3 manifest: permissions, commands, content/background/popup wiring, `side_panel` (Chrome-only — the Firefox build strips the key) |
-| `popup.html` / `popup.js` | The toolbar popup UI. The `SOCToolkit` class (popup.js:32) owns state, IOC parsing, OSINT link generation, graph rendering, snippets, settings, Ask-AI panel |
+| `popup.html` / `popup.js` | The toolbar popup UI. The `SOCToolkit` class (popup.js:32) owns state, IOC parsing, OSINT link generation, graph rendering, snippets, settings, Ask-AI panel, command-line heuristics (`CMDLINE_RULES`) |
 | `background.js` | MV3 service worker. Owns cross-origin fetch (popup can't fetch directly), `RateLimiter` (background.js:51), cache I/O, the central `chrome.runtime.onMessage` router (background.js:2199), context menus, notifications |
 | `content.js` | Injected **on demand** via `chrome.scripting.executeScript` (`ensureContentScript` in background.js) — there is no `content_scripts` block in the manifest, so it is not auto-injected into every page. Handles `copyToClipboard`, `toggleSnippets`, `highlightIOCs`, page-snippet UI. Listens via its own `chrome.runtime.onMessage` |
 | `tlds.js` | TLD allow-list used for domain extraction |

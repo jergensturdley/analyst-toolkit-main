@@ -1577,6 +1577,54 @@
       transform: rotate(-90deg);
     }
 
+    /* Command Line Analyzer findings */
+    .cmdline-finding {
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      background: var(--bg-accent);
+    }
+    .cmdline-finding-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+    .cmdline-sev {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border-primary);
+      color: var(--text-secondary);
+    }
+    .cmdline-sev-critical, .cmdline-sev-high { background: var(--danger-color); color: #000; border-color: transparent; }
+    .cmdline-sev-medium { background: var(--warning-color); color: #000; border-color: transparent; }
+    .cmdline-mitre {
+      font-size: 10px;
+      color: var(--osint-link-color);
+      text-decoration: none;
+      margin-left: auto;
+    }
+    .cmdline-mitre:hover { text-decoration: underline; }
+    .cmdline-why { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
+    .cmdline-snippet {
+      display: block;
+      margin-top: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: var(--text-primary);
+      background: var(--bg-primary);
+      border: 1px solid var(--border-secondary);
+      border-radius: 4px;
+      padding: 4px 6px;
+      word-break: break-all;
+    }
+    .cmdline-score { font-size: 11px; color: var(--text-secondary); margin-left: 8px; }
+
     /* Screen-reader summary line for live regex results; the match list
        itself stays out of the live region so SR users hear one line,
        not the whole dump, per run. */
@@ -2327,6 +2375,11 @@
   <!-- IOC Results Header -->
   <div class="ioc-header">
     <span class="ioc-count">IOC Results [0]</span>
+    <div class="ioc-controls">
+      <button class="btn btn-small" id="cmdLineOfferBtn" hidden title="Run the Command Line Analyzer on this text">
+        <i class="fa-solid fa-terminal" aria-hidden="true"></i> Analyze as command line
+      </button>
+    </div>
   </div>
 
   <!-- Bulk OSINT link toggle -->
@@ -2560,6 +2613,25 @@
         </div>
         <div id="urlUnfurlResults" class="settings-shortcuts-list"></div>
         <div class="tool-card-grip" id="toolGrip_unfurl" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
+      </div>
+    </details>
+
+    <!-- Command Line Analyzer (heuristic, local-only) -->
+    <details class="settings-section" id="toolCard_cmdline" open>
+      <summary class="settings-section-header tool-card-summary">
+        <i class="fa-solid fa-terminal" aria-hidden="true"></i> Command Line Analyzer
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+      </summary>
+      <div class="settings-section-body tool-card-body" id="toolCardBody_cmdline">
+        <textarea id="cmdLineInput" class="snippet-content-input" style="min-height:70px;" placeholder="powershell -nop -w hidden -enc SQBFAFgA…  or  curl -s http://… | bash" aria-label="Command line to analyze"></textarea>
+        <div class="settings-row-inline">
+          <button id="cmdLineAnalyzeBtn" class="btn btn-primary btn-small">
+            <i class="fa-solid fa-play" aria-hidden="true"></i> Analyze
+          </button>
+          <span id="cmdLineVerdict" role="status" aria-live="polite"></span>
+        </div>
+        <div id="cmdLineResults" class="settings-shortcuts-list"></div>
+        <div class="tool-card-grip" id="toolGrip_cmdline" role="separator" aria-orientation="horizontal" aria-label="Resize card" title="Drag to resize"></div>
       </div>
     </details>
   </div>

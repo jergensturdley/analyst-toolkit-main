@@ -2,6 +2,12 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Command Line Analyzer (Tools tab): ~45 local heuristics explain Windows and sh/bash command lines in plain English, with MITRE ATT&CK links and a 0-100 advisory score. Matches through common obfuscation (caret splitting, backticks, mixed case, concatenation, %VAR% assembly) and reports each trick as its own finding. IOC input that looks like a command line gets an "Analyze as command line" offer in the results header
+
 ## [0.6.1] - 2026-10-26
 
 ### Changed
