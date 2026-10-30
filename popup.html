@@ -432,6 +432,11 @@
       padding: 0;
       box-sizing: border-box;
     }
+
+    /* Author display rules (.btn, .ioc-controls…) would otherwise beat the
+       UA's [hidden] rule and render elements the JS asked to hide. */
+    [hidden] { display: none !important; }
+
     
     body {
       width: 800px;
