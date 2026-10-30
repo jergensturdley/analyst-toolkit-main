@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — SOC Analyst Toolkit
 
-Store copy reflecting v0.6.1. Host lists and permission names match
+Store copy reflecting v0.6.2. Host lists and permission names match
 `manifest.json` exactly; update both together on any permission change.
 
 ## Store Metadata
@@ -155,6 +155,7 @@ This extension does not load or execute any remote code. All logic runs locally 
 
 | Version | Date | Notes |
 |---|---|---|
+| 0.6.2 | 2026-10-30 | Command Line Analyzer: local heuristics explain Windows and sh/bash command lines in plain English, with obfuscation stripping, inline Base64 decoding, MITRE links, and OSINT pivots; tabs reordered (Tools second) |
 | 0.6.1 | 2026-10-26 | Actions menu moved to the toolbar; IOC results scroll full-height with a compact type tally; browser extension ID detection; Scamalytics IP enrichment; host permissions trimmed to API hosts; threat.rip removed (offline) |
 | 0.6.0 | 2026-10-07 | Tools tab hardening: safer live regex (match cap, screen-reader summary), keyboard- and touch-friendly resize grips, reliable card state persistence |
 | 0.5.8 | 2026-10-02 | Tools tab: transform workbench, live regex tester, URL unfurl, relocated file hashing on collapsible and resizable cards; Notes tab removed |
