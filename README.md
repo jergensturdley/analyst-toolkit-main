@@ -3,6 +3,8 @@
 
 A browser extension for security operations center (SOC) analysts and cybersecurity professionals to streamline the analysis of indicators of compromise (IOCs).
 
+**Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/soc-analyst-toolkit/kpcfelgeomjepjdbgmpdnaadlmggohin).**
+
 ## Overview
 
 This extension provides a suite of tools to accelerate the investigation of security alerts. It extracts IOCs (IPs, domains, URLs, hashes, etc.) from selected text, provides quick links to popular OSINT services, and includes text manipulation utilities for common analyst tasks. All processing is done locally in the browser for privacy and security.
@@ -41,6 +43,7 @@ This extension provides a suite of tools to accelerate the investigation of secu
 ### Productivity Features
 - **Snippet Library**: Personal, searchable library for frequently used notes, commands, and templates
 - **Tools Tab**: All-local utilities for triage
+  - Command Line Analyzer: paste a Windows or sh/bash command line and get a plain-English explanation of what it does, heuristics match through common obfuscation (`c^u^r^l`, `iNvOkE-eXpReSsIoN`), decode embedded Base64, and link every indicator to OSINT lookups, with MITRE ATT&CK references
   - Transform workbench: defang/refang, Base64 and URL encode/decode, ROT13, SHA-1/SHA-256 text hashing, JWT decode, Unix timestamp conversion
   - Live regex tester with IOC pattern presets
   - URL unfurling with decoded query parameters, plus bulk URL extraction
