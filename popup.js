@@ -163,7 +163,7 @@ class SOCToolkit {
     this._osintLinksCache = new Map();
     // Tool cards: one registry drives persistence (socSettings.toolCards),
     // the reconciler and the resize wiring.
-    this.TOOL_CARD_IDS = ['filehash', 'transform', 'regex', 'unfurl'];
+    this.TOOL_CARD_IDS = ['transform', 'cmdline', 'regex', 'unfurl', 'filehash'];
     this.toolCards = {};
     // Tools tab: registry-driven transforms, not scattered conditionals.
     // fn throws on bad input; runTextTool catches and shows the message.
@@ -247,6 +247,140 @@ class SOCToolkit {
       { id: 'jwt', label: 'JWT', pattern: '[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+', flags: 'g' }
     ];
     this.populateToolSelects();
+
+    // === Command Line Analyzer rule bank ===
+    // Pure heuristics for triage: a match means "a human should look at
+    // this", never "this is malware". All patterns are case-insensitive so
+    // mixed-case spelling (iNvOkE-eXpReSsIoN) is caught by the rules and
+    // flagged separately as obfuscation by _normalizeCommandLine.
+    this.CMDLINE_SEVERITY_WEIGHT = { low: 3, medium: 10, high: 20, critical: 40 };
+    this.CMDLINE_RULES = [
+      // --- Windows: execution + download cradles ---
+      { id: 'ps-encodedcommand', sev: 'high', mitre: 'T1027', title: 'Encoded PowerShell',
+        re: /-(?:e|ec|enc|encodedcommand)\b[\s:][A-Za-z0-9+/=]{16,}/i,
+        why: 'The payload is Base64. Decode it (Tools → Transform → Base64 decode) to see what runs.' },
+      { id: 'ps-frombase64', sev: 'high', mitre: 'T1027', title: 'Runtime Base64 decoding',
+        re: /frombase64string|frombase64string\(/i,
+        why: 'Decodes Base64 at runtime and usually passes the result to code execution.' },
+      { id: 'ps-iex', sev: 'medium', mitre: 'T1059.001', title: 'Execute-as-code (IEX / Invoke-Expression)',
+        re: /\b(?:iex|invoke-expression)\b/i,
+        why: 'Runs a string as code. Attackers use it to execute downloaded or decoded content.' },
+      { id: 'webclient-download', sev: 'high', mitre: 'T1105', title: 'PowerShell download cradle',
+        re: /webclient[\s\S]{0,120}download(?:string|file|data)\s*\(/i,
+        why: 'Downloads from the internet and runs the result in the same line.' },
+      { id: 'cradle-combo', sev: 'critical', mitre: 'T1059.001', title: 'Execute downloaded code (IEX + download)',
+        re: /\b(?:iex|invoke-expression)\b[\s\S]{0,240}download(?:string|file)\s*\(|download(?:string|file)\s*\([\s\S]{0,240}\b(?:iex|invoke-expression)\b/i,
+        why: 'Download and execution combined in one expression. The URL is the payload source; check where it points.' },
+      { id: 'download-api', sev: 'medium', mitre: 'T1105', title: 'Direct download call',
+        re: /download(?:string|file)\s*\(/i,
+        why: 'Downloads from a remote host. Legitimate in installers; check the URL.' },
+      { id: 'fetch-pipe-exec', sev: 'high', mitre: 'T1059.001', title: 'Download piped into execution',
+        re: /(?:invoke-webrequest|iwr|invoke-restmethod|curl|wget)[\s\S]{0,160}\|\s*(?:iex|invoke-expression|sh|bash)\b/i,
+        why: 'Downloads from the internet and executes the result without touching disk.' },
+      { id: 'certutil-fetch', sev: 'high', mitre: 'T1105', title: 'certutil used as downloader',
+        re: /certutil(?:\.exe)?\b[\s\S]{0,60}\s(?:-urlcache|-split|-verifyctl|-f)\b/i,
+        why: 'A certificate tool used to download files. Malware uses it because it is signed and present on every host.' },
+      { id: 'bitsadmin-fetch', sev: 'high', mitre: 'T1105', title: 'bitsadmin transfer',
+        re: /bitsadmin(?:\.exe)?\b[\s\S]{0,60}\s\/(?:transfer|create)\b/i,
+        why: 'Windows update transfer service used to fetch files. Legitimate tool, uncommon in interactive use.' },
+      { id: 'msiexec-remote', sev: 'high', mitre: 'T1218.007', title: 'msiexec from URL',
+        re: /msiexec(?:\.exe)?\b[\s\S]{0,120}https?:\/\//i,
+        why: 'Installs an MSI from a URL. A /q flag suppresses the install UI.' },
+      { id: 'mshta-remote', sev: 'high', mitre: 'T1218.005', title: 'mshta runs remote/script content',
+        re: /mshta(?:\.exe)?\b[\s\S]{0,80}(?:https?:|javascript:|vbscript:)/i,
+        why: 'Runs script or a remote page as an HTML application. Scripted use is rare outside attacks.' },
+      { id: 'rundll32-abuse', sev: 'high', mitre: 'T1218.011', title: 'rundll32 proxy execution',
+        re: /rundll32(?:\.exe)?\b[\s\S]{0,120}(?:javascript:|url\.dll|shell32\.dll,shellexec|comsvcs\.dll)/i,
+        why: 'Runs script or opens URLs through a trusted Windows binary, which bypasses script host restrictions.' },
+      { id: 'regsvr32-script', sev: 'high', mitre: 'T1218.010', title: 'regsvr32 remote script (Squiblydoo)',
+        re: /regsvr32(?:\.exe)?\b[\s\S]{0,120}(?:\/i:|scrobj)/i,
+        why: 'Loads a COM script that can come from a URL.' },
+      { id: 'wmic-process-create', sev: 'high', mitre: 'T1047', title: 'wmic spawns a process',
+        re: /wmic(?:\.exe)?\b[\s\S]{0,120}process\s+call\s+create/i,
+        why: 'Launches a process through WMI, which hides the real parent process.' },
+      { id: 'net-exec-lolbin', sev: 'medium', mitre: 'T1218', title: 'Trusted binary runs a payload',
+        re: /(?:installutil|regsvcs|regasm|msxsl)(?:\.exe)?\b/i,
+        why: 'Signed binaries that can run supplied or embedded code. They are trusted and rarely blocked.' },
+      { id: 'script-host-silent', sev: 'medium', mitre: 'T1204.002', title: 'Script host run silently',
+        re: /[wc]script(?:\.exe)?\b[\s\S]{0,60}\/\/[beh]/i,
+        why: 'Runs a script with no UI and no log output.' },
+
+      // --- Windows: persistence + defense evasion ---
+      { id: 'schtasks-create', sev: 'high', mitre: 'T1053.005', title: 'Scheduled task created',
+        re: /schtasks(?:\.exe)?\b[\s\S]{0,160}\/create\b/i,
+        why: 'Registers a task that re-runs code on a schedule or at logon. Common persistence.' },
+      { id: 'reg-run-key', sev: 'high', mitre: 'T1547.010', title: 'Run-key persistence',
+        re: /reg(?:\.exe)?\b[\s\S]{0,160}add[\s\S]{0,160}currentversion\\{0,2}(run|runonce)/i,
+        why: 'Writes an autostart registry value. The code runs again at every logon.' },
+      { id: 'shadow-delete', sev: 'high', mitre: 'T1490', title: 'Restore points deleted or recovery disabled',
+        re: /vssadmin(?:\.exe)?\b[\s\S]{0,80}delete\s+shadows|wmic(?:\.exe)?\b[\s\S]{0,120}shadowstorage\s+delete|bcdedit(?:\.exe)?\b[\s\S]{0,60}recoveryenabled\s+no/i,
+        why: 'Deletes restore points or turns off recovery. Ransomware does this to prevent rollback.' },
+      { id: 'lsass-dump', sev: 'high', mitre: 'T1003.001', title: 'Credential dump attempt',
+        re: /comsvcs\.dll[\s\S]{0,80}minidump|procdump[\s\S]{0,80}lsass|lsass\.exe?[\s\S]{0,40}\.dmp|sekurlsa::logonpasswords|ntds\.dit/i,
+        why: 'Reads password material from memory or the domain database.' },
+      { id: 'ps-stealth-flags', sev: 'medium', mitre: 'T1027', title: 'PowerShell stealth switches',
+        re: /powershell(?:\.exe)?\b[\s\S]{0,200}?(?:-w(?:indowstyle)?\s+(?:hidden|h)|-nop\b|-noninteractive|-exec(?:utionpolicy)?\s+(?:bypass|unrestricted))/i,
+        why: 'Runs PowerShell with a hidden window, or with the profile and execution-policy checks skipped.' },
+      { id: 'exec-from-userdir', sev: 'medium', mitre: 'T1204.002', title: 'Runs from a user-writable path',
+        re: /%(?:temp|appdata|localappdata)%[\s\S]{0,60}\.exe|\\(?:temp|appdata)[\s\S]{0,80}\.exe|c:\\users\\public[\s\S]{0,60}\.exe/i,
+        why: 'Runs an executable from Temp or AppData. Installed software normally lives elsewhere.' },
+      { id: 'net-user-add', sev: 'high', mitre: 'T1136.001', title: 'New local account created',
+        re: /net(?:\.exe)?\s+user\s+\S+\s+\S+\s+\/add/i,
+        why: 'Creates a local account that allows later access.' },
+      { id: 'cmd-lolbin-chain', sev: 'medium', mitre: 'T1202', title: 'Indirect execution via cmd',
+        re: /cmd(?:\.exe)?\s+\/c\s+(?:rundll32|regsvr32|mshta|certutil|bitsadmin|powershell|cscript|wscript)\b/i,
+        why: 'cmd.exe launches a second interpreter, which adds a layer between the alert and what runs.' },
+      { id: 'recon-host', sev: 'low', mitre: 'T1033', title: 'Host reconnaissance',
+        re: /\bwhoami(?:\.exe)?\s+\/(?:all|priv)\b|\bsysteminfo(?:\.exe)?\b|\bnet\s+(?:view|localgroup\s+administrators)\b|\btasklist\s+\/v\b|\bnltest\b[\s\S]{0,40}\/(?:domain_trusts|dclist)\b|\bdsquery\b/i,
+        why: 'Collects host or domain inventory: current user, privileges, domain layout. Common in administration and in reconnaissance.' },
+      { id: 'kerberos-purge', sev: 'medium', mitre: 'T1550.003', title: 'Kerberos tickets purged',
+        re: /\bklist(?:\.exe)?\b[\s\S]{0,40}\bpurge\b/i,
+        why: 'Clears Kerberos tickets. Done before ticket abuse, or to remove traces.' },
+
+      // --- sh / bash ---
+      { id: 'curl-pipe-shell', sev: 'critical', mitre: 'T1059.004', title: 'Download piped straight to shell',
+        re: /(?:curl|wget)[^|;]{0,240}\|\s*(?:sudo\s+)?(?:ba|z|da|k)?sh\b/i,
+        why: 'Downloads a script and runs it without inspection. The URL decides what executes.' },
+      { id: 'reverse-shell-tcp', sev: 'high', mitre: 'T1059.004', title: 'Reverse shell callback',
+        re: /bash\s+-i\b[\s\S]{0,40}(?:>&|>\s*\/dev\/tcp)|\/dev\/tcp\/|(?:nc|ncat|netcat)\b[^|]{0,80}\s-(?:e|\/e)\s|(?:socat)\b[\s\S]{0,120}(?:EXEC|SYSTEM):/i,
+        why: 'Connects out to a remote host and gives it an interactive shell.' },
+      { id: 'b64-pipe-shell', sev: 'high', mitre: 'T1027', title: 'Decode-and-execute chain',
+        re: /base64\b[\s\S]{0,40}(?:-d|--decode|-di)\b[\s\S]{0,120}\|\s*(?:ba|z)?sh\b|\bx?xd\b[\s\S]{0,60}-r[\s\S]{0,40}\|\s*(?:ba|z)?sh\b/i,
+        why: 'Decodes Base64 or hex and pipes the result into a shell. The payload is not readable in the command itself.' },
+      { id: 'interp-exec-string', sev: 'high', mitre: 'T1059', title: 'Interpreter runs inline/encoded code',
+        re: /(?:python3?|perl|ruby|node)\b[\s\S]{0,40}(?:-c\s|c )[\s\S]{0,40}(?:base64|exec|eval|popen|system\()/i,
+        why: 'Runs an inline one-liner through a script interpreter, often encoded or built with eval.' },
+      { id: 'exec-from-tmpfs', sev: 'medium', mitre: 'T1105', title: 'Execution from world-writable dirs',
+        re: /\/dev\/shm\/\S|\/(?:var\/)?tmp\/\S+\.(?:sh|py|pl|bin)|chmod\s+[0-7]*\+?x\s+\/(?:tmp|dev\/shm|var\/tmp)\//i,
+        why: 'Stages or executes a file in /tmp or /dev/shm. Common in build tooling, unusual on servers.' },
+      { id: 'linux-persistence', sev: 'medium', mitre: 'T1053.003', title: 'Linux persistence mechanism',
+        re: /crontab\b[\s\S]{0,60}(?:-e|-l|-r|\/etc\/)|\/etc\/cron(?:tab|\.d)\/|systemctl\s+(?:enable|start)\s+\S+|\/etc\/rc\.local/i,
+        why: 'Arranges for code to run again later: cron, systemd, or boot scripts.' },
+      { id: 'ssh-key-access', sev: 'medium', mitre: 'T1552.004', title: 'SSH key material read',
+        re: /\.ssh\/(?:id_rsa|id_ed25519|authorized_keys)/i,
+        why: 'Reads private keys or modifies authorized_keys, which allows later access without a password.' },
+      { id: 'binary-overwrite', sev: 'medium', mitre: 'T1222.002', title: 'Download overwrites system binary',
+        re: /(?:curl|wget)[^|;]{0,160}\/(?:usr\/)?(?:bin|sbin|local\/bin)\//i,
+        why: 'Replaces a system executable with a downloaded file.' },
+      { id: 'hist-cleanup', sev: 'low', mitre: 'T1070.003', title: 'History cleared',
+        re: /history\s+-c|rm\s+[^|;&]{0,40}\/\.?(?:bash|zsh)_history|unset\s+HISTFILE|shred[\s\S]{0,40}history/i,
+        why: 'Deletes command history, removing the record of what ran.' },
+
+      // --- Generic obfuscation artifacts (also caught pre-normalization) ---
+      { id: 'b64-mega-blob', sev: 'medium', mitre: 'T1027', title: 'Very large Base64 blob',
+        re: /[A-Za-z0-9+/]{300,}={0,2}/,
+        why: 'A very large encoded block. Decode it to see what runs or gets written.' },
+      { id: 'caret-split', sev: 'high', mitre: 'T1027', title: 'Caret-split command (c^u^r^l)',
+        re: /\w\^\w\^\w|\^\w\^\w/,
+        why: 'cmd.exe removes carets before running, so c^u^r^l reads as "curl". Splitting ordinary letters this way only serves to evade matching.' },
+      { id: 'string-concat-split', sev: 'medium', mitre: 'T1027', title: 'String built by concatenation',
+        re: /["'][\s\S]{0,40}["']\s*\+\s*["']|["']\s*\+\s*["'][\s\S]{0,40}["']/,
+        why: 'Builds a command from glued string fragments. The parts only mean something joined.' },
+      { id: 'ps-backtick-split', sev: 'medium', mitre: 'T1027', title: 'Backtick-escaped PowerShell',
+        re: /`\w[\s\S]{0,4}`/,
+        why: 'PowerShell ignores backticks inside names (In`voke-Ex`pression), which splits recognizable words.' },
+    ];
+
 
     // Load critical settings first, TLDs lazily
     await Promise.all([
@@ -722,6 +856,8 @@ class SOCToolkit {
     el('regexPresetSelect')?.addEventListener('change', (e) => this.applyRegexPreset(e.target.value));
     el('urlUnfurlBtn')?.addEventListener('click', () => this.renderUrlUnfurl());
     el('urlExtractBtn')?.addEventListener('click', () => this.renderExtractedUrls());
+    el('cmdLineAnalyzeBtn')?.addEventListener('click', () => this.runCommandLineTool());
+    el('cmdLineOfferBtn')?.addEventListener('click', () => this._jumpToCommandLineAnalyzer());
 
     // Tool cards: persist collapse/expand (details toggle) and wire resize grips
     for (const id of this.TOOL_CARD_IDS) {
@@ -747,8 +883,8 @@ class SOCToolkit {
       // Quick navigation with numbers
       if (e.altKey && !e.target.matches?.('input, textarea')) {
         if (e.key === '1') { e.preventDefault(); this.switchTab('ioc'); }
-        if (e.key === '2') { e.preventDefault(); this.switchTab('snippets'); }
-        if (e.key === '3') { e.preventDefault(); this.switchTab('tools'); }
+        if (e.key === '2') { e.preventDefault(); this.switchTab('tools'); }
+        if (e.key === '3') { e.preventDefault(); this.switchTab('snippets'); }
         if (e.key === '4') { e.preventDefault(); this.switchTab('settings'); }
       }
     });
@@ -1215,6 +1351,7 @@ class SOCToolkit {
     this.lastIOCs = iocs;
     this.lastIOCInput = input;
     this.displayIOCResults(iocs);
+    this.offerCommandLineAnalysis();
     if (this.autoEnrich && iocs.length) {
       this._autoEnrichResults(iocs);
     }
@@ -4385,6 +4522,238 @@ class SOCToolkit {
     const row = (label, value) => `<div class="settings-shortcut-row"><span>${this.escapeHtml(label)}</span><span>${this.escapeHtml(value)}</span></div>`;
     out.innerHTML = row('URLs found', String(urls.length)) +
       urls.map(u => row('', u)).join('');
+  }
+
+  // === Command Line Analyzer ===
+  // Heuristic triage for people who do not want to read command lines:
+  // normalize obvious obfuscation, match the rule bank, explain every hit
+  // in plain English. Verdicts are advisory, never a claim.
+
+  // Cheap gate for the "Analyze as command line" offer in the IOC header:
+  // one strong interpreter/LOLBin token, or an obvious shell/pipe shape.
+  looksLikeCommandLine(text) {
+    const t = String(text || '').toLowerCase();
+    if (t.length < 12) return false;
+    if (/\b(powershell|pwsh|mshta|rundll32|regsvr32|certutil|bitsadmin|msiexec|schtasks|wmic|vssadmin|wscript|cscript|installutil|regasm|regsvcs|msxsl|nltest|klist|dsquery)\b/.test(t)) return true;
+    if (/(?:^|\s)(?:cmd)(?:\.exe)?\s+\/[ck]\b/.test(t)) return true;
+    if (/\b(?:curl|wget)\b[^|;\n]{0,240}\|\s*(?:sudo\s+)?(?:ba|z|da|k)?sh\b/.test(t)) return true;
+    if (/\b(?:bash|sh|zsh|dash|ksh)\b\s+-c\b/.test(t)) return true;
+    if (/\/dev\/tcp\/|\w\^\w\^\w/.test(t)) return true;
+    return false;
+  }
+
+  // Undo the cheap obfuscation tricks so the rule bank can match through
+  // them, and record each trick as its own finding. Carets (cmd.exe) and
+  // backticks (PowerShell) are simply deleted; case tricks are handled by
+  // the rules' /i flags and reported here.
+  _normalizeCommandLine(raw) {
+    const findings = [];
+    let text = String(raw || '');
+    const caretHits = (text.match(/\^/g) || []).length;
+    if (caretHits >= 2) {
+      findings.push({ sev: 'medium', title: 'Caret insertion (cmd.exe)', why: 'cmd.exe removes carets before running, so c^u^r^l means "curl". The rules below matched the caret-stripped text.' });
+      text = text.replace(/\^/g, '');
+    }
+    if (/`\w/.test(text)) {
+      findings.push({ sev: 'medium', title: 'Backtick escaping (PowerShell)', why: 'PowerShell ignores backticks inside names. Here they break up recognizable words.' });
+      text = text.replace(/`/g, '');
+    }
+    // Mixed-case spelling of well-known tokens (iNvOkE-eXpReSsIoN): the
+    // lowercase text contains the token but the original spelling never
+    // appears in plain or ALL-CAPS form.
+    const lower = text.toLowerCase();
+    for (const token of ['powershell', 'invoke-expression', 'iex', 'certutil', 'curl', 'wget', 'cmd.exe', 'mshta', 'rundll32', 'regsvr32', 'schtasks', 'bash']) {
+      const i = lower.indexOf(token);
+      if (i < 0) continue;
+      const spelling = text.slice(i, i + token.length);
+      if (spelling !== token && spelling !== token.toUpperCase() && /[a-z]/.test(spelling) && /[A-Z]/.test(spelling)) {
+        findings.push({ sev: 'medium', title: 'Mixed-case spelling', why: `The command "${token}" is spelled "${spelling}". Mixed case only helps hide from pattern matching.` });
+        break; // one finding is enough to make the point
+      }
+    }
+    const envVars = new Set(text.match(/%[a-z_][a-z0-9_]*%/gi) || []);
+    if (envVars.size >= 2) {
+      findings.push({ sev: 'medium', title: 'Environment-variable assembly', why: `Parts of the command sit inside ${envVars.size} %variables%. Expand them before judging the line.` });
+    }
+    return { text, findings };
+  }
+
+  // Try to decode Base64(-url) blobs >= 40 chars embedded in a command.
+  // PowerShell -EncodedCommand payloads are UTF-16LE, so both UTF-8 and
+  // UTF-16LE are attempted; a decode counts when it is mostly printable.
+  _tryDecodeBase64Blobs(text) {
+    const out = [];
+    for (const m of String(text).matchAll(/[A-Za-z0-9+/_-]{40,}={0,2}/g)) {
+      let bin;
+      try { bin = atob(m[0].replace(/-/g, '+').replace(/_/g, '/')); } catch (e) { continue; }
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      for (const enc of ['utf-8', 'utf-16le']) {
+        let decoded;
+        try { decoded = new TextDecoder(enc, { fatal: false }).decode(bytes); } catch (e) { continue; }
+        const printable = [...decoded].filter((ch) => ch === '\n' || ch === '\t' || (ch >= ' ' && ch <= '~')).length;
+        if (decoded.trim().length >= 8 && printable / Math.max(decoded.length, 1) > 0.9) {
+          out.push({ blob: m[0], decoded, enc });
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  analyzeCommandLine(raw, depth = 0) {
+    const { text, findings } = this._normalizeCommandLine(raw);
+    const rawText = String(raw);
+    const matched = [];
+    for (const rule of this.CMDLINE_RULES) {
+      // Prefer the normalized text; fall back to the raw text so the
+      // obfuscation-artifact rules (carets, backticks) can still fire —
+      // normalization strips exactly the characters they look for.
+      let src = text;
+      let m = rule.re.exec(src);
+      if (!m && rawText !== text) {
+        src = rawText;
+        m = rule.re.exec(src);
+      }
+      if (!m) continue;
+      // Pivot: indicators near the matched span get OSINT links in the UI.
+      // The URL often sits inside the parens the pattern stops at, so look
+      // at a window around the match, not just the matched text.
+      const window = src.slice(Math.max(0, m.index - 80), m.index + m[0].length + 80);
+      const hitIocs = this.extractIOCs(window).slice(0, 5);
+      matched.push({ ...rule, snippet: m[0].slice(0, 120), iocs: hitIocs });
+    }
+
+    // Decode embedded Base64 and run the rules against the payload too
+    // (one level deep). Encoded cradles are the whole reason this matters.
+    let decodedText = null;
+    if (depth === 0) {
+      const blobs = this._tryDecodeBase64Blobs(text);
+      if (blobs.length) {
+        const first = blobs[0];
+        decodedText = first.decoded;
+        findings.push({
+          sev: 'medium', title: 'Decoded Base64 payload',
+          why: `The encoded block decodes (${first.enc}) to the text below; the rules also ran against it.`,
+          decodedText: first.decoded.slice(0, 600)
+        });
+        const sub = this.analyzeCommandLine(first.decoded, 1);
+        for (const m2 of sub.matched) {
+          if (!matched.some((m) => m.id === m2.id)) matched.push({ ...m2, via: 'decoded payload' });
+        }
+        for (const f2 of sub.findings) findings.push(f2);
+      }
+    }
+
+    const all = matched.concat(findings);
+    let score = 0;
+    for (const hit of all) score += this.CMDLINE_SEVERITY_WEIGHT[hit.sev] || 0;
+    score = Math.min(100, score);
+    // Severity-aware verdict: a single critical or two high-severity hits
+    // read as high risk; one high (or accumulated mediums) stays at
+    // suspicious — heuristics should not shout "malicious" alone.
+    const highs = all.filter((h) => h.sev === 'high').length;
+    let verdict;
+    if (all.length === 0) verdict = 'clean';
+    else if (all.some((h) => h.sev === 'critical') || highs >= 2 || score >= 60) verdict = 'malicious';
+    else if (highs >= 1 || score >= 15) verdict = 'suspicious';
+    else verdict = 'review';
+
+    // Global indicator pivot: everything extractable from the (normalized,
+    // and if present decoded) text, deduped by value.
+    const seen = new Set();
+    const iocs = [];
+    for (const src of [text, decodedText]) {
+      if (!src) continue;
+      for (const ioc of this.extractIOCs(src)) {
+        const k = ioc.value.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        iocs.push(ioc);
+      }
+    }
+
+    return { verdict, score, matched, findings, iocs, decodedText };
+  }
+
+  runCommandLineTool() {
+    const inputEl = document.getElementById('cmdLineInput');
+    if (!inputEl) return;
+    this._renderCommandLineResults(this.analyzeCommandLine(inputEl.value));
+  }
+
+  _renderCommandLineResults(result) {
+    const out = document.getElementById('cmdLineResults');
+    const verdictEl = document.getElementById('cmdLineVerdict');
+    if (!out) return;
+    const chipClass = { malicious: 'malicious', suspicious: 'suspicious', review: 'unknown', clean: 'clean' }[result.verdict];
+    const verdictText = { malicious: 'high risk', suspicious: 'suspicious', review: 'review', clean: 'no patterns matched' }[result.verdict];
+    if (verdictEl) verdictEl.innerHTML =
+      `<span class="row-status-chip ${chipClass}">${this.escapeHtml(verdictText)}</span>` +
+      (result.matched.length + result.findings.length
+        ? ` <span class="cmdline-score">score ${result.score}/100 · heuristic</span>`
+        : ' <span class="cmdline-score">heuristic — absence of matches is not proof of safety</span>');
+    const osintLinks = (ioc) => this.generateOSINTLinks(ioc.value, ioc.category)
+      .map((l) => `<a class="osint-link" href="${this.escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer" title="${this.escapeHtml(l.name)}">${this.escapeHtml(l.name)}</a>`)
+      .join('');
+    const iocRows = (iocs) => iocs
+      .map((ioc) => `<div class="cmdline-ioc"><span class="cmdline-ioc-value">${this.escapeHtml(ioc.value)}</span><span class="cmdline-ioc-links">${osintLinks(ioc)}</span></div>`)
+      .join('');
+
+    const hits = result.matched.concat(result.findings);
+    // A URL near several matches would repeat per finding; show each value
+    // once above the Indicators block, which lists them all.
+    const shownValues = new Set();
+    const findingsHtml = hits.map((hit) => {
+      const mitre = hit.mitre
+        ? ` <a class="cmdline-mitre" href="https://attack.mitre.org/techniques/${this.escapeHtml(hit.mitre.replace('.', '/'))}/" target="_blank" rel="noopener noreferrer" title="MITRE ATT&CK technique">${this.escapeHtml(hit.mitre)}</a>`
+        : '';
+      const snippet = hit.snippet ? `<code class="cmdline-snippet">${this.escapeHtml(hit.snippet)}</code>` : '';
+      const decoded = hit.decodedText ? `<pre class="cmdline-snippet cmdline-decoded">${this.escapeHtml(hit.decodedText)}</pre>` : '';
+      const freshIocs = (hit.iocs || []).filter((i) => { const k = i.value.toLowerCase(); if (shownValues.has(k)) return false; shownValues.add(k); return true; });
+      const iocs = freshIocs.length ? `<div class="osint-links cmdline-hit-iocs">${iocRows(freshIocs)}</div>` : '';
+      return `<div class="cmdline-finding">
+        <div class="cmdline-finding-head"><b>${this.escapeHtml(hit.title)}</b>${mitre}</div>
+        <div class="cmdline-why">${this.escapeHtml(hit.why)}</div>
+        ${snippet}
+        ${decoded}
+        ${iocs}
+      </div>`;
+    }).join('');
+
+    const iocs = result.iocs || [];
+    const shown = iocs.slice(0, 10);
+    const iocsHtml = iocs.length
+      ? `<div class="cmdline-iocs-head">Indicators in this text${iocs.length > 10 ? ` (${iocs.length})` : ''}</div>` +
+        `<div class="osint-links cmdline-global-iocs">${iocRows(shown)}</div>` +
+        (iocs.length > 10 ? `<div class="settings-hint">+${iocs.length - 10} more in the IOC tab</div>` : '')
+      : '';
+
+    out.innerHTML = (findingsHtml ||
+      '<div class="settings-hint">No known suspicious patterns matched. This is a heuristic check, not a verdict.</div>') + iocsHtml;
+  }
+
+  // Auto-offer in the IOC results header: shows the small "command line"
+  // button only when the analyzed text actually looks like one.
+  offerCommandLineAnalysis() {
+    const btn = document.getElementById('cmdLineOfferBtn');
+    if (!btn) return;
+    const input = document.getElementById('iocInput');
+    btn.hidden = !this.looksLikeCommandLine(input ? input.value : '');
+  }
+
+  _jumpToCommandLineAnalyzer() {
+    const input = document.getElementById('iocInput');
+    const target = document.getElementById('cmdLineInput');
+    if (!target) return;
+    this.switchTab('tools');
+    const card = document.getElementById('toolCard_cmdline');
+    if (card && !card.open) {
+      card.open = true;
+      this._onToolCardToggle('cmdline');
+    }
+    target.value = (input ? input.value : '');
+    this.runCommandLineTool();
+    target.scrollIntoView?.({ block: 'start' });
   }
 
   // === File Hash Analysis ===

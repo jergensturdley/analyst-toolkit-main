@@ -2,6 +2,16 @@
 
 All notable changes to the SOC Analyst Toolkit will be documented in this file.
 
+## [0.6.2] - 2026-10-30
+
+### Added
+
+- Command Line Analyzer (Tools tab): ~45 local heuristics explain Windows and sh/bash command lines in plain English, with MITRE ATT&CK links and a 0-100 advisory score. Matches through common obfuscation (caret splitting, backticks, mixed case, concatenation, %VAR% assembly) and reports each trick as its own finding. Embedded Base64 decodes inline (UTF-8 and UTF-16LE) and the rules run against the payload. Indicators near a match render with the same OSINT links the IOC rows use. IOC input that looks like a command line gets an "Analyze as command line" offer in the results header
+
+### Changed
+
+- Tab order is now IOC Analysis, Tools, Snippets, Settings (Alt+2 opens Tools, Alt+3 Snippets); Tool cards run Transform, Command Line Analyzer, Regex Tester, URL Unfurl, File Hash
+
 ## [0.6.1] - 2026-10-26
 
 ### Changed

