@@ -109,7 +109,7 @@ Contributions are welcome. Please feel free to submit bug reports, feature reque
 
 ### Developer Documentation
 
-- **[AGENTS.md](AGENTS.md)**: Comprehensive guide for implementing enrichment agents for third-party threat intelligence integrations. Includes architecture, API specifications, caching strategy, and implementation checklists.
+- **[docs/ENRICHMENT.md](docs/ENRICHMENT.md)**: Enrichment architecture, providers per IOC type, result format, caching, rate limits, error handling, and the checklist for adding a new provider.
 - **[FEATURES.md](FEATURES.md)**: Detailed feature documentation for all IOC types and OSINT integrations.
 - **[UPGRADE_GUIDE.md](UPGRADE_GUIDE.md)**: Guide for upgrading between major versions.
 
