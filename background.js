@@ -34,7 +34,7 @@ let floatingWindowState = {
   top: 100
 };
 
-// --- Enrichment infrastructure (AGENTS.md alignment) ---
+// --- Enrichment infrastructure (docs/ENRICHMENT.md alignment) ---
 const CACHE_TTL = {
   ip: 24 * 60 * 60 * 1000,
   domain: 7 * 24 * 60 * 60 * 1000,
@@ -169,7 +169,7 @@ async function getCachedAgentResult(agentId, iocType, ioc) {
   return clone;
 }
 
-// AGENTS.md cap: keep only the newest maxEntries agent2_ cache entries.
+// ENRICHMENT.md cap: keep only the newest maxEntries agent2_ cache entries.
 function agentCacheKeysToPrune(allStorageData, maxEntries = 1000) {
   const entries = Object.entries(allStorageData || {})
     .filter(([key]) => key.startsWith('agent2_'))

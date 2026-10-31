@@ -54,7 +54,7 @@ No linter, formatter, or bundler is configured. All three suites load the real `
 | `tests/verify_features.js` | Node-based IOC parser/regex smoke tests against the real `popup.js` + `background.js` via the VM harnesses |
 | `tests/popup_harness.js` / `tests/verify_popup.js` | VM loader for the real `popup.js` and the behavior tests that drive it (dedupe, IPv6 extraction, row actions, settings, snippets, export) |
 | `tests/background_harness.js` / `tests/verify_background.js` | VM loader for the real `background.js` (fetch-stubbed) and the enrichment-agent tests (error taxonomy, VT shapes, URLhaus status, cache eviction, rate budget) |
-| `AGENTS.md` | Enrichment-agent design doc (architecture, rate limits, caching, per-IOC-type agent specs) — read before touching enrichment code |
+| `docs/ENRICHMENT.md` | Enrichment design doc (providers per IOC type, result format, caching, rate limits, error taxonomy), read before touching enrichment code |
 | `FEATURES.md`, `UPGRADE_GUIDE.md`, `CHANGELOG.md` | User-facing/upgrade docs |
 | `docs/superpowers/` | Design specs and implementation plans (e.g. Ask AI + QA/security/UX work) — current planned-but-not-shipped work lives here |
 
@@ -90,7 +90,7 @@ Three execution contexts, connected by `chrome.runtime` messages. Each context o
 2. Popup receives the selected text via `getPendingAnalysis` from background (the context menu stashed it in `pendingAnalysis` / `chrome.storage.local`).
 3. `SOCToolkit.analyzeIOCs` (popup.js:706) runs the regex bank against the input, dedupes, classifies (IP / domain / URL / hash / email / CVE / MITRE / crypto / MAC), and renders the result list + the vis-network graph.
 4. `generateOSINTLinks` (popup.js:1908) builds per-IOC lookup URLs for ~20 providers; the popup's context menu and `openXxxLookup` family in background.js (`openVirusTotalLookup`, `openAlienVaultLookup`, `openAbuseIPDBLookup`, `openIpInfoLookup`, `openMitreLookup`, `openBlockchainLookup`) open them.
-5. Enrichment agents (per `AGENTS.md`) are invoked via `agentEnrich` → `runAgent` in background, with per-provider caching (`agent_<id>_<type>_<ioc>` keys in `chrome.storage.local`) and `RateLimiter` guarding each provider.
+5. Enrichment agents (per `docs/ENRICHMENT.md`) are invoked via `agentEnrich` → `runAgent` in background, with per-provider caching (`agent_<id>_<type>_<ioc>` keys in `chrome.storage.local`) and `RateLimiter` guarding each provider.
 
 ## Persistence
 
@@ -109,7 +109,7 @@ API keys are user-supplied only; never hardcode one. Background fallbacks: when 
 - **Context placement**: state belongs in popup, fetches belong in background, DOM access belongs in content. Don't fetch from popup.js.
 - **Adding a message**: add an `action` to the background router at `background.js:2199`, then send from popup/content. Return `true` from the listener when async.
 - **Adding a new IOC type**: regex + classifier in `popup.js` (see existing `patterns.*` and `analyzeIOCs`), then per-type lookup function in background if there's an OSINT provider for it.
-- **Adding an enrichment agent**: follow the per-IOC-type template in `AGENTS.md` (normalized result format, TTL, rate-limit entry, fallback to web UI). Tests live in `tests/verify_features.js` / `tests/verify_background.js` and run the real production code through the VM harnesses.
+- **Adding an enrichment agent**: follow the checklist in `docs/ENRICHMENT.md` (normalized result format, TTL, rate-limit entry, fallback to web UI). Tests live in `tests/verify_features.js` / `tests/verify_background.js` and run the real production code through the VM harnesses.
 - **Visuals**: popup pulls `vis-network.js` and `webfonts/`; themes are defined as CSS classes on `<body>`. New theme = new class in `css/`.
 - **Plan/spec docs under `docs/superpowers/`**: when a feature has a spec + plan there, treat them as authoritative for scope and naming before touching the code.
 
